@@ -36,5 +36,10 @@ if {[llength $ip_files] > 0} {
     add_files -fileset sources_1 $ip_files
 }
 
+set edn_files [glob -nocomplain $origin/ip/*/*.edn]
+if {[llength $edn_files] > 0} {
+    add_files -fileset sources_1 $edn_files
+}
+
 set_property top top [get_filesets sources_1]
 update_compile_order -fileset sources_1

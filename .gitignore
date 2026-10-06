@@ -26,6 +26,7 @@ usage_statistics_webtalk.*
 ip/**/*
 !ip/**/
 !ip/**/*.xci
+!ip/**/*.edn
 
 *.dcp
 *.bit
