@@ -218,4 +218,4 @@ set_property -dict { PACKAGE_PIN H17   IOSTANDARD LVCMOS33 } [get_ports { eth_tx
 # Zegary MII (25 MHz z PHY) i niezależność od zegara systemowego
 create_clock -period 40.000 -name eth_rx_clk -waveform {0.000 20.000} [get_ports eth_rx_clk]
 create_clock -period 40.000 -name eth_tx_clk -waveform {0.000 20.000} [get_ports eth_tx_clk]
-set_clock_groups -asynchronous -group [get_clocks sys_clk] -group [get_clocks eth_rx_clk] -group [get_clocks eth_tx_clk]
+set_clock_groups -asynchronous -group [get_clocks sys_clk_pin] -group [get_clocks eth_rx_clk] -group [get_clocks eth_tx_clk]

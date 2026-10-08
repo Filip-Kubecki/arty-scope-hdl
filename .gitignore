@@ -1,6 +1,8 @@
 build/
 *.xpr
 
+docs/TODO.md
+
 .Xil/
 *.cache/
 *.hw/

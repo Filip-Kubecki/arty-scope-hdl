@@ -1,3 +1,5 @@
+<!-- markdownlint-disable MD013 MD060 -->
+
 # Two-Channel Oscilloscope for Arty A7
 
 VHDL design for a digital oscilloscope built on the Digilent Arty A7 100T (Artix-7) with a custom analog expansion board.
@@ -7,7 +9,7 @@ VHDL design for a digital oscilloscope built on the Digilent Arty A7 100T (Artix
 - **FPGA board:** Digilent Arty A7 100T (Artix-7 - xc7a100tcsg324-1)
 - **ADC:** AD9288-100 (dual 8-bit, 100 MS/s)
 - **PGA:** AD8370 (variable gain amplifier)
-- **DAC:** MCP4822 (dual 12-bit, SPI)
+- **DAC:** MCP4822 (DC offset)
 
 ## Related repositories
 
@@ -19,9 +21,9 @@ VHDL design for a digital oscilloscope built on the Digilent Arty A7 100T (Artix
 rtl/           VHDL sources
 tb/            testbenches
 constraints/   XDC files
-ip/            Vivado IP definitions (.xci only)
+ip/            Vivado IP definitions
 scripts/       Tcl scripts (project creation)
-docs/          notes
+docs/          notes and documentation
 build/         generated Vivado project (git-ignored)
 ```
 

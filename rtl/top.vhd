@@ -2,12 +2,12 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
--- Top-level: test echo przez TCP. Każde odebrane 32-bitowe słowo wraca do komputera.
--- LED0 = heartbeat, LED1 = IP_Ok, LED2 = klient TCP połączony, LED3 = zmienia stan przy każdym słowie.
+-- Test echa bajtowego przez TCP. Każdy odebrany bajt wraca do komputera.
+-- LED0 = heartbeat, LED1 = IP_Ok, LED2 = klient TCP połączony, LED3 = aktywność (odebrany bajt).
 -- Nazwy portów zgodne z oficjalnym plikiem XDC Digilent dla Arty A7.
 entity top is
     port (
-        CLK100MHZ : in  std_logic;
+        CLK100MHZ : in  std_logic;                      -- zegar 100 MHz z płytki Arty
         btn       : in  std_logic_vector(3 downto 0);   -- przyciski, btn(0) = reset (aktywny stanem wysokim)
         led       : out std_logic_vector(3 downto 0);
 
@@ -33,16 +33,19 @@ architecture rtl of top is
     signal resetn    : std_logic;
     signal counter   : unsigned(26 downto 0) := (others => '0');
 
-    signal rx_data   : std_logic_vector(31 downto 0);
+    -- Strumień bajtów w obu kierunkach (tcp_link <-> top)
+    signal rx_data   : std_logic_vector(7 downto 0);
     signal rx_valid  : std_logic;
     signal rx_ready  : std_logic;
-    signal tx_data   : std_logic_vector(31 downto 0);
-    signal tx_valid  : std_logic;
+    signal tx_data   : std_logic_vector(7 downto 0) := (others => '0');
+    signal tx_valid  : std_logic := '0';
     signal tx_ready  : std_logic;
 
     signal ip_ok     : std_logic;
     signal connected : std_logic;
-    signal word_tgl  : std_logic := '0';
+
+    -- Wydłużony impuls aktywności (ok. 42 ms), żeby dioda była widoczna
+    signal act_cnt   : unsigned(21 downto 0) := (others => '0');
 
 begin
 
@@ -50,7 +53,7 @@ begin
 
     u_tcp : entity work.tcp_link
         generic map (
-            G_IP   => x"C0A80132", -- 192.168.1.50
+            G_IP   => x"C0A80132",   -- 192.168.1.50
             G_PORT => 5000
         )
         port map (
@@ -79,17 +82,33 @@ begin
             eth_mdio    => eth_mdio
         );
 
-    -- echo: odebrane słowo trafia prosto do nadawania
-    tx_data  <= rx_data;
-    tx_valid <= rx_valid;
-    rx_ready <= tx_ready;
+    -- Echo bajtowe z jednym rejestrem. Przyjmujemy bajt tylko wtedy, gdy rejestr jest pusty
+    -- (rx_ready zależy wyłącznie od tx_valid), więc nie ma ścieżki kombinacyjnej
+    -- między wyjściami a wejściami rdzenia.
+    rx_ready <= not tx_valid;
 
     process (CLK100MHZ)
     begin
         if rising_edge(CLK100MHZ) then
             counter <= counter + 1;
-            if rx_valid = '1' and tx_ready = '1' then
-                word_tgl <= not word_tgl;
+
+            if resetn = '0' then
+                tx_valid <= '0';
+                act_cnt  <= (others => '0');
+            else
+                -- Bajt przyjęty przez rdzeń: zwolnij rejestr
+                if tx_valid = '1' and tx_ready = '1' then
+                    tx_valid <= '0';
+                end if;
+
+                -- Bajt odebrany: zapamiętaj go i zacznij wysyłać
+                if rx_valid = '1' and rx_ready = '1' then
+                    tx_data  <= rx_data;
+                    tx_valid <= '1';
+                    act_cnt  <= (others => '1');
+                elsif act_cnt /= 0 then
+                    act_cnt <= act_cnt - 1;
+                end if;
             end if;
         end if;
     end process;
@@ -97,6 +116,6 @@ begin
     led(0) <= counter(26);
     led(1) <= ip_ok;
     led(2) <= connected;
-    led(3) <= word_tgl;
+    led(3) <= '1' when act_cnt /= 0 else '0';
 
 end architecture rtl;
