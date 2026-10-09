@@ -2,16 +2,14 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
--- Test echa bajtowego przez TCP. Każdy odebrany bajt wraca do komputera.
--- LED0 = heartbeat, LED1 = IP_Ok, LED2 = klient TCP połączony, LED3 = aktywność (odebrany bajt).
--- Nazwy portów zgodne z oficjalnym plikiem XDC Digilent dla Arty A7.
+-- Top-level: testy TCP. Tryb echa (domyślny) i tryb strumienia, BTN1 przełącza tryb, BTN0 resetuje
 entity top is
     port (
-        CLK100MHZ : in  std_logic;                      -- zegar 100 MHz z płytki Arty
-        btn       : in  std_logic_vector(3 downto 0);   -- przyciski, btn(0) = reset (aktywny stanem wysokim)
+        CLK100MHZ : in  std_logic;
+        btn       : in  std_logic_vector(3 downto 0);
         led       : out std_logic_vector(3 downto 0);
 
-        -- Ethernet MII (PHY na płytce Arty)
+        -- Ethernet MII
         eth_ref_clk : out   std_logic;
         eth_rstn    : out   std_logic;
         eth_col     : in    std_logic;
@@ -33,7 +31,7 @@ architecture rtl of top is
     signal resetn    : std_logic;
     signal counter   : unsigned(26 downto 0) := (others => '0');
 
-    -- Strumień bajtów w obu kierunkach (tcp_link <-> top)
+    -- strumień bajtów z/do tcp_link
     signal rx_data   : std_logic_vector(7 downto 0);
     signal rx_valid  : std_logic;
     signal rx_ready  : std_logic;
@@ -44,14 +42,24 @@ architecture rtl of top is
     signal ip_ok     : std_logic;
     signal connected : std_logic;
 
-    -- Wydłużony impuls aktywności (ok. 42 ms), żeby dioda była widoczna
+    -- impuls aktywności dla LED3
     signal act_cnt   : unsigned(21 downto 0) := (others => '0');
+
+    -- tryb: '0' echo, '1' strumień
+    signal stream_mode : std_logic := '0';
+    signal mode_prev   : std_logic := '0';
+
+    -- obsługa BTN1
+    signal btn1_sync  : std_logic_vector(1 downto 0) := (others => '0');
+    signal btn1_state : std_logic := '0';
+    signal btn1_prev  : std_logic := '0';
+    signal db_cnt     : unsigned(20 downto 0) := (others => '0');
 
 begin
 
     resetn <= not btn(0);
 
-    u_tcp : entity work.tcp_link
+    u_tcp : entity work.fc1002_mii_tcp_link
         generic map (
             G_IP   => x"C0A80132",   -- 192.168.1.50
             G_PORT => 5000
@@ -59,14 +67,18 @@ begin
         port map (
             clk         => CLK100MHZ,
             resetn      => resetn,
+            
             m_rx_data   => rx_data,
             m_rx_valid  => rx_valid,
             m_rx_ready  => rx_ready,
+            
             s_tx_data   => tx_data,
             s_tx_valid  => tx_valid,
             s_tx_ready  => tx_ready,
+            
             ip_ok       => ip_ok,
             connected   => connected,
+            
             eth_ref_clk => eth_ref_clk,
             eth_rstn    => eth_rstn,
             eth_col     => eth_col,
@@ -82,32 +94,79 @@ begin
             eth_mdio    => eth_mdio
         );
 
-    -- Echo bajtowe z jednym rejestrem. Przyjmujemy bajt tylko wtedy, gdy rejestr jest pusty
-    -- (rx_ready zależy wyłącznie od tx_valid), więc nie ma ścieżki kombinacyjnej
-    -- między wyjściami a wejściami rdzenia.
-    rx_ready <= not tx_valid;
+    -- w trybie strumienia odbierane bajty są odrzucane
+    rx_ready <= '1' when stream_mode = '1' else not tx_valid;
 
+    -- Przełączanie trybu BTN1
+    process (CLK100MHZ)
+    begin
+        if rising_edge(CLK100MHZ) then
+            btn1_sync <= btn1_sync(0) & btn(1);
+            btn1_prev <= btn1_state;
+
+            if btn1_sync(1) /= btn1_state then
+                if db_cnt(20) = '1' then
+                    btn1_state <= btn1_sync(1);
+                    db_cnt     <= (others => '0');
+                else
+                    db_cnt <= db_cnt + 1;
+                end if;
+            else
+                db_cnt <= (others => '0');
+            end if;
+
+            if resetn = '0' then
+                stream_mode <= '0';
+            elsif btn1_state = '1' and btn1_prev = '0' then
+                stream_mode <= not stream_mode;
+            end if;
+        end if;
+    end process;
+
+    -- Nadawanie: echo albo strumień
     process (CLK100MHZ)
     begin
         if rising_edge(CLK100MHZ) then
             counter <= counter + 1;
 
             if resetn = '0' then
-                tx_valid <= '0';
-                act_cnt  <= (others => '0');
+                tx_valid  <= '0';
+                tx_data   <= (others => '0');
+                act_cnt   <= (others => '0');
+                mode_prev <= '0';
             else
-                -- Bajt przyjęty przez rdzeń: zwolnij rejestr
-                if tx_valid = '1' and tx_ready = '1' then
-                    tx_valid <= '0';
-                end if;
+                mode_prev <= stream_mode;
 
-                -- Bajt odebrany: zapamiętaj go i zacznij wysyłać
-                if rx_valid = '1' and rx_ready = '1' then
-                    tx_data  <= rx_data;
-                    tx_valid <= '1';
-                    act_cnt  <= (others => '1');
-                elsif act_cnt /= 0 then
-                    act_cnt <= act_cnt - 1;
+                if stream_mode /= mode_prev then
+                    -- zmiana trybu
+                    tx_valid <= '0';
+                    tx_data  <= (others => '0');
+
+                elsif stream_mode = '1' then
+                    -- strumień
+                    if connected = '0' then
+                        tx_valid <= '0';
+                        tx_data  <= (others => '0');
+                    else
+                            tx_valid <= '1';
+                        if tx_valid = '1' and tx_ready = '1' then
+                            tx_data <= std_logic_vector(unsigned(tx_data) + 1);
+                        end if;
+                    end if;
+
+                else
+                    -- echo
+                    if tx_valid = '1' and tx_ready = '1' then
+                        tx_valid <= '0';
+                    end if;
+
+                    if rx_valid = '1' and rx_ready = '1' then
+                        tx_data  <= rx_data;
+                        tx_valid <= '1';
+                        act_cnt  <= (others => '1');
+                    elsif act_cnt /= 0 then
+                        act_cnt <= act_cnt - 1;
+                    end if;
                 end if;
             end if;
         end if;
@@ -116,6 +175,6 @@ begin
     led(0) <= counter(26);
     led(1) <= ip_ok;
     led(2) <= connected;
-    led(3) <= '1' when act_cnt /= 0 else '0';
+    led(3) <= '1' when (stream_mode = '1') or (act_cnt /= 0) else '0';
 
 end architecture rtl;

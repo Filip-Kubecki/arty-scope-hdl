@@ -1,7 +1,7 @@
 build/
 *.xpr
 
-docs/TODO.md
+docs/*
 
 .Xil/
 *.cache/
@@ -63,3 +63,5 @@ venv/
 *~
 .DS_Store
 Thumbs.db
+docs/protocol.md
+tb
