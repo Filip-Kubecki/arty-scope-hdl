@@ -3,12 +3,6 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 -- Wrapper rdzenia FC1002_MII (stały adres IP, bez DHCP).
--- Moduł nie zawiera logiki protokołu: udostępnia strumień bajtów z/do TCP
--- oraz sygnały stanu. Rdzeń działa jako serwer TCP, komputer łączy się jako klient na G_IP:G_PORT.
---
--- Interfejs bajtowy (handshake valid/ready, transfer w takcie, w którym oba sygnały są wysokie):
---   m_rx_*  bajty odebrane z komputera (wyjście modułu)
---   s_tx_*  bajty do wysłania do komputera (wejście modułu)
 
 entity fc1002_mii_tcp_link is
     generic (
