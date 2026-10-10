@@ -24,6 +24,7 @@ entity frame_tx is
     port (
         clk       : in  std_logic;
         rst       : in  std_logic;
+        link_up   : in  std_logic;
 
         -- żądanie nadania odpowiedzi
         trigger     : in  std_logic;                -- impuls: rozpocznij nadawanie
@@ -63,7 +64,7 @@ begin
         if rising_edge(clk) then
             done_r <= '0';
 
-            if rst = '1' then
+            if rst = '1' or link_up = '0' then
                 state    <= S_IDLE;
                 byte_cnt <= (others => '0');
 
