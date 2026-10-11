@@ -31,7 +31,11 @@ entity ctrl_protocol is
         cmd_valid  : out std_logic;
         cmd_addr   : out byte_t;
 
-        -- wyjście debugowe
+        -- stan akwizycji (z acquisition_ctrl)
+        acquisition_state     : in  byte_t;
+        acquisition_record_id : in  word_t;
+
+        -- wyjście debug
         debug_led  : out byte_t
     );
 end entity ctrl_protocol;
@@ -74,7 +78,8 @@ begin
             req_data  => request_data,
             resp_done => tx_done,
             frame_ok  => frame_ok,
-            bad_magic => bad_magic);
+            bad_magic => bad_magic
+          );
 
     u_reg_access : entity work.reg_access
         port map (
@@ -90,7 +95,10 @@ begin
             response_data  => response_data,
             cmd_valid      => cmd_valid,
             cmd_addr       => cmd_addr,
-            debug_led      => debug_led);
+            acquisition_state     => acquisition_state,
+            acquisition_record_id => acquisition_record_id,
+            debug_led      => debug_led
+          );
 
     u_frame_tx : entity work.frame_tx
         port map (
@@ -105,6 +113,7 @@ begin
             done      => tx_done,
             tx_data   => tx_data,
             tx_valid  => tx_valid,
-            tx_ready  => tx_ready);
+            tx_ready  => tx_ready
+          );
 
 end architecture rtl;

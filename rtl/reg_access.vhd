@@ -12,6 +12,7 @@ use work.regmap_pkg.all;
 --   DEVICE_ID, PROTOCOL_VERSION, DEBUG_CONST   tylko odczyt
 --   DEBUG_SCRATCH0, DEBUG_SCRATCH1             odczyt i zapis
 --   DEBUG_LED                                  odczyt i zapis, bity [7:0] na debug_led
+--   ACQUISITION_STATE, ACQUISITION_RECORD_ID   tylko odczyt, wartości z acquisition_ctrl
 --
 -- Strefa komend 0x10-0x17: zapis daje RESPONSE_WRITE z danymi 0 i impuls
 -- cmd_valid; odczyt daje ERROR_WRITE_ONLY. Adresy 0x18-0x1F są niewspierane.
@@ -45,6 +46,10 @@ entity reg_access is
         -- polecenie do logiki akwizycji (impuls, tylko zapisy do strefy komend)
         cmd_valid       : out std_logic;
         cmd_addr        : out byte_t;
+
+        -- stan akwizycji (z acquisition_ctrl)
+        acquisition_state     : in  byte_t;
+        acquisition_record_id : in  word_t;
 
         -- wyjście debugowe
         debug_led       : out byte_t
@@ -112,7 +117,9 @@ begin
                         v_data      := request_data;
 
                     elsif request_addr = ADDR_DEVICE_ID or request_addr = ADDR_PROTOCOL_VERSION
-                          or request_addr = ADDR_DEBUG_CONST then
+                          or request_addr = ADDR_DEBUG_CONST
+                          or request_addr = ADDR_ACQUISITION_STATE
+                          or request_addr = ADDR_ACQUISITION_RECORD_ID then
                         v_err  := true;
                         v_code := ERROR_READ_ONLY;
 
@@ -134,6 +141,12 @@ begin
 
                     elsif request_addr = ADDR_PROTOCOL_VERSION then
                         v_data := VAL_PROTOCOL_VERSION;
+
+                    elsif request_addr = ADDR_ACQUISITION_STATE then
+                        v_data := x"000000" & acquisition_state;
+
+                    elsif request_addr = ADDR_ACQUISITION_RECORD_ID then
+                        v_data := acquisition_record_id;
 
                     elsif request_addr = ADDR_DEBUG_SCRATCH0 then
                         v_data := debug_scratch0_r;

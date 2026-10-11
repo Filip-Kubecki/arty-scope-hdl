@@ -67,6 +67,17 @@ architecture rtl of top is
     signal counter     : unsigned(26 downto 0) := (others => '0');
     signal act_cnt     : unsigned(21 downto 0) := (others => '0');
 
+    -- Akwizycja sygnału
+    signal acq_enable       : std_logic;
+    signal acq_state        : byte_t;
+    signal acq_record_id    : word_t;
+    signal acq_mem_we       : std_logic;
+    signal acq_mem_addr     : unsigned(12 downto 0);
+    signal acq_mem_data     : std_logic_vector(15 downto 0);
+    signal adc_sample_valid : std_logic;
+    signal adc_ch1          : byte_t;
+    signal adc_ch2          : byte_t;
+
     -- ADC (mcp3201)
     signal adc_sample_valid : std_logic;
     signal adc_ch1          : byte_t;
@@ -153,17 +164,45 @@ begin
             debug_led => debug_led_s
         );
 
+
     u_adc : entity work.adc_mcp3201
         port map (
             clk          => CLK100MHZ,
             rst          => not resetn,
-            enable       => adc_en,
+            enable       => acq_enable,
             sample_valid => adc_sample_valid,
             ch1          => adc_ch1,
             ch2          => adc_ch2,
             adc_clk      => ADC_CLK,
             adc_cs       => ADC_CS,
             adc_dout     => ADC_DOUT
+        );
+
+    u_acq : entity work.acq_ctrl
+        port map (
+            clk          => CLK100MHZ,
+            rst          => not resetn,
+            cmd_valid    => ctrl_cmd_valid,
+            cmd_addr     => ctrl_cmd_addr,
+            sample_valid => adc_sample_valid,
+            ch1          => adc_ch1,
+            ch2          => adc_ch2,
+            enable       => acq_enable,
+            mem_we       => acq_mem_we,
+            mem_addr     => acq_mem_addr,
+            mem_data     => acq_mem_data,
+            state        => acq_state,
+            record_id    => acq_record_id
+        );
+
+    u_mem : entity work.sample_mem
+        port map (
+            clk   => CLK100MHZ,
+            we    => acq_mem_we,
+            waddr => acq_mem_addr,
+            wdata => acq_mem_data,
+            raddr => (others => '0'),
+            rdata => open
         );
 
     -- wybór źródła bajtów wysyłanych do TCP
