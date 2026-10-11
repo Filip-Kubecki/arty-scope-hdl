@@ -37,6 +37,11 @@ entity top is
         led2_r, led2_g, led2_b : out std_logic;
         led3_r, led3_g, led3_b : out std_logic;
 
+        -- ADC (MCP3201)
+        ADC_CLK     : out STD_LOGIC;
+        ADC_CS      : out STD_LOGIC;
+        ADC_DOUT    : in  STD_LOGIC;
+
         -- Ethernet MII
         eth_ref_clk : out   std_logic;
         eth_rstn    : out   std_logic;
@@ -61,6 +66,12 @@ architecture rtl of top is
     signal ctrl_rst    : std_logic;
     signal counter     : unsigned(26 downto 0) := (others => '0');
     signal act_cnt     : unsigned(21 downto 0) := (others => '0');
+
+    -- ADC (mcp3201)
+    signal adc_sample_valid : std_logic;
+    signal adc_ch1          : byte_t;
+    signal adc_ch2          : byte_t;
+    signal adc_en           : std_logic := '0';
 
     -- TCP (fc1002_mii_tcp_link)
     signal m_rx_data   : std_logic_vector(7 downto 0);
@@ -140,6 +151,19 @@ begin
             cmd_valid => ctrl_cmd_valid,
             cmd_addr  => ctrl_cmd_addr,
             debug_led => debug_led_s
+        );
+
+    u_adc : entity work.adc_mcp3201
+        port map (
+            clk          => CLK100MHZ,
+            rst          => not resetn,
+            enable       => adc_en,
+            sample_valid => adc_sample_valid,
+            ch1          => adc_ch1,
+            ch2          => adc_ch2,
+            adc_clk      => ADC_CLK,
+            adc_cs       => ADC_CS,
+            adc_dout     => ADC_DOUT
         );
 
     -- wybór źródła bajtów wysyłanych do TCP
