@@ -17,10 +17,14 @@ use work.regmap_pkg.all;
 -- Strefa komend 0x10-0x17: zapis daje RESPONSE_WRITE z danymi 0 i impuls
 -- cmd_valid; odczyt daje ERROR_WRITE_ONLY. Adresy 0x18-0x1F są niewspierane.
 --
+-- ADDR_COMMAND_READ_RECORD (0x17): nie generuje cmd_valid. Gdy stan akwizycji
+-- to READY, zwraca RESPONSE_WRITE z danymi 0 i impuls record_req. Inaczej
+-- ERROR_NOT_READY. Wysłanie bloku robi nadrzędny moduł po record_req.
+--
 -- Pozostałe adresy zwracają ERROR_BAD_ADDRESS. Komenda inna niż WRITE i READ
 -- zwraca ERROR_UNKNOWN_COMMAND.
 --
--- Czas: odpowiedź i cmd_valid pojawiają się takt po request_start.
+-- Czas: odpowiedź, cmd_valid i record_req pojawiają się takt po request_start.
 -- request_* muszą być stabilne do response_valid.
 --
 -- Dane błędu: kod w najmłodszym bajcie, reszta zerowa.
@@ -31,27 +35,30 @@ entity reg_access is
         clk             : in  std_logic;
         rst             : in  std_logic;
 
-        -- żądanie z ctrl_protocol
-        request_start   : in  std_logic;                  -- impuls
+        -- Żądanie z ctrl_protocol
+        request_start   : in  std_logic;    -- impuls
         request_cmd     : in  byte_t;
         request_addr    : in  byte_t;
         request_data    : in  word_t;
 
-        -- odpowiedź (1 takt po request_start)
+        -- Odpowiedź (1 takt po request_start)
         response_valid  : out std_logic;
-        response_cmd    : out byte_t;                     -- pełny bajt odpowiedzi
-        response_addr   : out byte_t;                     -- echo adresu
+        response_cmd    : out byte_t;       -- pełny bajt odpowiedzi
+        response_addr   : out byte_t;       -- echo adresu
         response_data   : out word_t;
 
-        -- polecenie do logiki akwizycji (impuls, tylko zapisy do strefy komend)
+        -- Polecenie do logiki akwizycji (impuls, tylko zapisy do strefy komend)
         cmd_valid       : out std_logic;
         cmd_addr        : out byte_t;
 
-        -- stan akwizycji (z acquisition_ctrl)
+        -- Żądanie wysłania rekordu (impuls, tylko przy READ_RECORD gdy READY)
+        record_req      : out std_logic;
+
+        -- Stan akwizycji (z acquisition_ctrl)
         acquisition_state     : in  byte_t;
         acquisition_record_id : in  word_t;
 
-        -- wyjście debugowe
+        -- Wyjście debug
         debug_led       : out byte_t
     );
 end entity reg_access;
@@ -70,6 +77,7 @@ architecture rtl of reg_access is
     signal response_data_r   : word_t    := (others => '0');
     signal cmd_valid_r       : std_logic := '0';
     signal cmd_addr_r        : byte_t    := (others => '0');
+    signal record_req_r      : std_logic := '0';
 
 begin
 
@@ -79,6 +87,7 @@ begin
     response_data  <= response_data_r;
     cmd_valid      <= cmd_valid_r;
     cmd_addr       <= cmd_addr_r;
+    record_req     <= record_req_r;
     debug_led      <= debug_led_r(7 downto 0);
 
     p_req : process (clk)
@@ -90,6 +99,7 @@ begin
         if rising_edge(clk) then
             response_valid_r <= '0';
             cmd_valid_r      <= '0';
+            record_req_r     <= '0';
 
             if rst = '1' then
                 debug_scratch0_r <= (others => '0');
@@ -122,6 +132,15 @@ begin
                           or request_addr = ADDR_ACQUISITION_RECORD_ID then
                         v_err  := true;
                         v_code := ERROR_READ_ONLY;
+
+                    elsif request_addr = ADDR_COMMAND_READ_RECORD then
+                        if acquisition_state = x"03" then
+                            record_req_r <= '1';
+                            v_data       := (others => '0');
+                        else
+                            v_err  := true;
+                            v_code := ERROR_NOT_READY;
+                        end if;
 
                     elsif v_addr >= 16 and v_addr <= 23 then
                         -- strefa komend 0x10-0x17
@@ -175,7 +194,7 @@ begin
                     v_code := ERROR_UNKNOWN_COMMAND;
                 end if;
 
-                -- zbudowanie odpowiedzi
+                -- Zbudowanie odpowiedzi
                 response_addr_r <= request_addr;
                 if v_err then
                     response_cmd_r  <= RESPONSE_ERROR;

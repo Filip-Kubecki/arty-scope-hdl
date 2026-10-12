@@ -19,7 +19,6 @@ use work.regmap_pkg.all;
 --   led(3)  tryb ciągły albo aktywność odbioru z TCP
 --
 -- LED-y RGB (led0..led2) pokazują debug_led z ctrl_protocol, bit = kolor.
--- Kolory są przypisane w sekcji przypisań na końcu pliku.
 --
 -- BTN0 resetuje układ.
 -- =============================================================================
@@ -38,9 +37,9 @@ entity top is
         led3_r, led3_g, led3_b : out std_logic;
 
         -- ADC (MCP3201)
-        ADC_CLK     : out STD_LOGIC;
-        ADC_CS      : out STD_LOGIC;
-        ADC_DOUT    : in  STD_LOGIC;
+        ADC_CLK     : out std_logic;
+        ADC_CS      : out std_logic;
+        ADC_DOUT    : in  std_logic;
 
         -- Ethernet MII
         eth_ref_clk : out   std_logic;
@@ -61,57 +60,62 @@ end entity top;
 
 architecture rtl of top is
 
-    signal resetn      : std_logic;
-    signal stream_sel  : std_logic;
-    signal ctrl_rst    : std_logic;
-    signal counter     : unsigned(26 downto 0) := (others => '0');
-    signal act_cnt     : unsigned(21 downto 0) := (others => '0');
+    -- Resety i tryb pracy
+    signal system_reset_n     : std_logic;
+    signal stream_mode        : std_logic;
+    signal control_reset      : std_logic;
+    signal acquisition_reset  : std_logic;
 
-    -- Akwizycja sygnału
-    signal acq_enable       : std_logic;
-    signal acq_state        : byte_t;
-    signal acq_record_id    : word_t;
-    signal acq_mem_we       : std_logic;
-    signal acq_mem_addr     : unsigned(12 downto 0);
-    signal acq_mem_data     : std_logic_vector(15 downto 0);
-    signal adc_sample_valid : std_logic;
-    signal adc_ch1          : byte_t;
-    signal adc_ch2          : byte_t;
+    -- Liczniki pomocnicze
+    signal heartbeat_counter  : unsigned(26 downto 0) := (others => '0');
+    signal rx_activity_counter : unsigned(21 downto 0) := (others => '0');
+
+    -- Odczyt pamięci rekordu (control_protocol -> sample_mem)
+    signal control_read_address : unsigned(12 downto 0);
+    signal memory_read_data     : std_logic_vector(15 downto 0);
+
+    -- Akwizycja
+    signal acquisition_enable          : std_logic;
+    signal acquisition_state           : byte_t;
+    signal acquisition_record_id       : word_t;
+    signal acquisition_mem_write_enable : std_logic;
+    signal acquisition_mem_address     : unsigned(12 downto 0);
+    signal acquisition_mem_data        : std_logic_vector(15 downto 0);
 
     -- ADC (mcp3201)
     signal adc_sample_valid : std_logic;
     signal adc_ch1          : byte_t;
     signal adc_ch2          : byte_t;
-    signal adc_en           : std_logic := '0';
 
     -- TCP (fc1002_mii_tcp_link)
-    signal m_rx_data   : std_logic_vector(7 downto 0);
-    signal m_rx_valid  : std_logic;
-    signal m_rx_ready  : std_logic;
-    signal s_tx_data   : std_logic_vector(7 downto 0);
-    signal s_tx_valid  : std_logic;
-    signal s_tx_ready  : std_logic;
-    signal ip_ok       : std_logic;
-    signal connected   : std_logic;
+    signal tcp_rx_data          : std_logic_vector(7 downto 0);
+    signal tcp_rx_valid         : std_logic;
+    signal tcp_rx_ready         : std_logic;
+    signal tcp_tx_data          : std_logic_vector(7 downto 0);
+    signal tcp_tx_valid         : std_logic;
+    signal tcp_tx_ready         : std_logic;
+    signal ip_address_ready     : std_logic;
+    signal tcp_client_connected : std_logic;
 
     -- ctrl_protocol
-    signal ctrl_rx_ready : std_logic;
-    signal ctrl_tx_data  : byte_t;
-    signal ctrl_tx_valid : std_logic;
-    signal ctrl_tx_ready : std_logic;
-    signal ctrl_cmd_valid: std_logic;
-    signal ctrl_cmd_addr : byte_t;
-    signal debug_led_s   : byte_t;
+    signal control_rx_ready      : std_logic;
+    signal control_tx_data       : byte_t;
+    signal control_tx_valid      : std_logic;
+    signal control_tx_ready      : std_logic;
+    signal control_command_valid : std_logic;
+    signal control_command_addr  : byte_t;
+    signal debug_led_bits        : byte_t;
 
-    -- test ciągłego przesyłu
-    signal stream_data  : std_logic_vector(7 downto 0) := (others => '0');
-    signal stream_valid : std_logic := '0';
+    -- Test ciągłego przesyłu
+    signal stream_test_data  : std_logic_vector(7 downto 0) := (others => '0');
+    signal stream_test_valid : std_logic := '0';
 
 begin
 
-    resetn     <= not btn(0);
-    stream_sel <= sw(0);
-    ctrl_rst   <= (not resetn) or stream_sel;
+    system_reset_n    <= not btn(0);
+    stream_mode       <= sw(0);
+    control_reset     <= (not system_reset_n) or stream_mode;
+    acquisition_reset <= not system_reset_n;
 
     u_tcp : entity work.fc1002_mii_tcp_link
         generic map (
@@ -120,18 +124,18 @@ begin
         )
         port map (
             clk         => CLK100MHZ,
-            resetn      => resetn,
+            resetn      => system_reset_n,
 
-            m_rx_data   => m_rx_data,
-            m_rx_valid  => m_rx_valid,
-            m_rx_ready  => m_rx_ready,
+            m_rx_data   => tcp_rx_data,
+            m_rx_valid  => tcp_rx_valid,
+            m_rx_ready  => tcp_rx_ready,
 
-            s_tx_data   => s_tx_data,
-            s_tx_valid  => s_tx_valid,
-            s_tx_ready  => s_tx_ready,
+            s_tx_data   => tcp_tx_data,
+            s_tx_valid  => tcp_tx_valid,
+            s_tx_ready  => tcp_tx_ready,
 
-            ip_ok       => ip_ok,
-            connected   => connected,
+            ip_ok       => ip_address_ready,
+            connected   => tcp_client_connected,
 
             eth_ref_clk => eth_ref_clk,
             eth_rstn    => eth_rstn,
@@ -150,26 +154,29 @@ begin
 
     u_ctrl : entity work.ctrl_protocol
         port map (
-            clk       => CLK100MHZ,
-            rst       => ctrl_rst,
-            link_up   => connected,
-            rx_data   => m_rx_data,
-            rx_valid  => m_rx_valid,
-            rx_ready  => ctrl_rx_ready,
-            tx_data   => ctrl_tx_data,
-            tx_valid  => ctrl_tx_valid,
-            tx_ready  => ctrl_tx_ready,
-            cmd_valid => ctrl_cmd_valid,
-            cmd_addr  => ctrl_cmd_addr,
-            debug_led => debug_led_s
+            clk                   => CLK100MHZ,
+            rst                   => control_reset,
+            link_up               => tcp_client_connected,
+            rx_data               => tcp_rx_data,
+            rx_valid              => tcp_rx_valid,
+            rx_ready              => control_rx_ready,
+            tx_data               => control_tx_data,
+            tx_valid              => control_tx_valid,
+            tx_ready              => control_tx_ready,
+            cmd_valid             => control_command_valid,
+            cmd_addr              => control_command_addr,
+            debug_led             => debug_led_bits,
+            acquisition_state     => acquisition_state,
+            acquisition_record_id => acquisition_record_id,
+            rd_addr               => control_read_address,
+            rd_data               => memory_read_data
         );
-
 
     u_adc : entity work.adc_mcp3201
         port map (
             clk          => CLK100MHZ,
-            rst          => not resetn,
-            enable       => acq_enable,
+            rst          => acquisition_reset,
+            enable       => acquisition_enable,
             sample_valid => adc_sample_valid,
             ch1          => adc_ch1,
             ch2          => adc_ch2,
@@ -178,88 +185,88 @@ begin
             adc_dout     => ADC_DOUT
         );
 
-    u_acq : entity work.acq_ctrl
+    u_acq : entity work.acquisition_ctrl
         port map (
             clk          => CLK100MHZ,
-            rst          => not resetn,
-            cmd_valid    => ctrl_cmd_valid,
-            cmd_addr     => ctrl_cmd_addr,
+            rst          => acquisition_reset,
+            cmd_valid    => control_command_valid,
+            cmd_addr     => control_command_addr,
             sample_valid => adc_sample_valid,
             ch1          => adc_ch1,
             ch2          => adc_ch2,
-            enable       => acq_enable,
-            mem_we       => acq_mem_we,
-            mem_addr     => acq_mem_addr,
-            mem_data     => acq_mem_data,
-            state        => acq_state,
-            record_id    => acq_record_id
+            enable       => acquisition_enable,
+            mem_we       => acquisition_mem_write_enable,
+            mem_addr     => acquisition_mem_address,
+            mem_data     => acquisition_mem_data,
+            state        => acquisition_state,
+            record_id    => acquisition_record_id
         );
 
     u_mem : entity work.sample_mem
         port map (
             clk   => CLK100MHZ,
-            we    => acq_mem_we,
-            waddr => acq_mem_addr,
-            wdata => acq_mem_data,
-            raddr => (others => '0'),
-            rdata => open
+            we    => acquisition_mem_write_enable,
+            waddr => acquisition_mem_address,
+            wdata => acquisition_mem_data,
+            raddr => control_read_address,
+            rdata => memory_read_data
         );
 
-    -- wybór źródła bajtów wysyłanych do TCP
-    s_tx_data     <= stream_data  when stream_sel = '1' else ctrl_tx_data;
-    s_tx_valid    <= stream_valid when stream_sel = '1' else ctrl_tx_valid;
-    ctrl_tx_ready <= '0'          when stream_sel = '1' else s_tx_ready;
+    -- Wybór źródła bajtów wysyłanych do TCP
+    tcp_tx_data      <= stream_test_data  when stream_mode = '1' else control_tx_data;
+    tcp_tx_valid     <= stream_test_valid when stream_mode = '1' else control_tx_valid;
+    control_tx_ready <= '0'               when stream_mode = '1' else tcp_tx_ready;
 
-    -- wybór odbiorcy bajtów z TCP; w trybie ciągłym bajty są odrzucane
-    m_rx_ready <= '1' when stream_sel = '1' else ctrl_rx_ready;
+    -- Wybór odbiorcy bajtów z TCP; w trybie ciągłym bajty są odrzucane
+    tcp_rx_ready <= '1' when stream_mode = '1' else control_rx_ready;
 
-    -- generator licznika dla testu ciągłego przesyłu
-    p_stream : process (CLK100MHZ)
+    -- Generator licznika dla testu ciągłego przesyłu
+    p_stream_test : process (CLK100MHZ)
     begin
         if rising_edge(CLK100MHZ) then
-            if resetn = '0' or stream_sel = '0' or connected = '0' then
-                stream_data  <= (others => '0');
-                stream_valid <= '0';
+            if system_reset_n = '0' or stream_mode = '0' or tcp_client_connected = '0' then
+                stream_test_data  <= (others => '0');
+                stream_test_valid <= '0';
             else
-                stream_valid <= '1';
-                if stream_valid = '1' and s_tx_ready = '1' then
-                    stream_data <= std_logic_vector(unsigned(stream_data) + 1);
+                stream_test_valid <= '1';
+                if stream_test_valid = '1' and tcp_tx_ready = '1' then
+                    stream_test_data <= std_logic_vector(unsigned(stream_test_data) + 1);
                 end if;
             end if;
         end if;
-    end process p_stream;
+    end process p_stream_test;
 
-    -- aktywność odbioru: LED3 świeci przez chwilę po każdym odebranym bajcie
-    p_activity : process (CLK100MHZ)
+    -- Aktywność odbioru: LED3 świeci przez chwilę po każdym odebranym bajcie
+    p_rx_activity : process (CLK100MHZ)
     begin
         if rising_edge(CLK100MHZ) then
-            counter <= counter + 1;
+            heartbeat_counter <= heartbeat_counter + 1;
 
-            if resetn = '0' then
-                act_cnt <= (others => '0');
-            elsif m_rx_valid = '1' and m_rx_ready = '1' then
-                act_cnt <= (others => '1');
-            elsif act_cnt /= 0 then
-                act_cnt <= act_cnt - 1;
+            if system_reset_n = '0' then
+                rx_activity_counter <= (others => '0');
+            elsif tcp_rx_valid = '1' and tcp_rx_ready = '1' then
+                rx_activity_counter <= (others => '1');
+            elsif rx_activity_counter /= 0 then
+                rx_activity_counter <= rx_activity_counter - 1;
             end if;
         end if;
-    end process p_activity;
+    end process p_rx_activity;
 
-    -- zwykłe LED-y
-    led(0) <= counter(26);
-    led(1) <= ip_ok;
-    led(2) <= connected;
-    led(3) <= '1' when (stream_sel = '1') or (act_cnt /= 0) else '0';
+    -- Zwykłe LED-y
+    led(0) <= heartbeat_counter(26);
+    led(1) <= ip_address_ready;
+    led(2) <= tcp_client_connected;
+    led(3) <= '1' when (stream_mode = '1') or (rx_activity_counter /= 0) else '0';
 
     -- LED-y RGB: każdy bit debug_led steruje jednym kolorem
-    led0_r <= debug_led_s(0);
-    led0_g <= debug_led_s(1);
-    led0_b <= debug_led_s(2);
-    led1_r <= debug_led_s(3);
-    led1_g <= debug_led_s(4);
-    led1_b <= debug_led_s(5);
-    led2_r <= debug_led_s(6);
-    led2_g <= debug_led_s(7);
+    led0_r <= debug_led_bits(0);
+    led0_g <= debug_led_bits(1);
+    led0_b <= debug_led_bits(2);
+    led1_r <= debug_led_bits(3);
+    led1_g <= debug_led_bits(4);
+    led1_b <= debug_led_bits(5);
+    led2_r <= debug_led_bits(6);
+    led2_g <= debug_led_bits(7);
     led2_b <= '0';
     led3_r <= '0';
     led3_g <= '0';
