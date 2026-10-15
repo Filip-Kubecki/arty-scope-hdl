@@ -1,7 +1,7 @@
 build/
 *.xpr
 
-docs/*
+docs/TODO.md
 
 .Xil/
 *.cache/
