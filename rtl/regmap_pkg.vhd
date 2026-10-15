@@ -53,7 +53,7 @@ package regmap_pkg is
     constant ADDR_COMMAND_STOP : byte_t := x"12";  -- implemented: Zatrzymanie akwizycji, powrót do IDLE
     constant ADDR_COMMAND_FORCE_TRIGGER : byte_t := x"13";  -- implemented: Ręczne wyzwolenie z ARMED
     constant ADDR_COMMAND_CLEAR_FLAGS : byte_t := x"14";  -- accepted: Kasowanie flag, dane = maska (dziś bez efektu)
-    constant ADDR_COMMAND_CLEAR_COUNTERS : byte_t := x"15";  -- accepted: Zerowanie liczników (dziś bez efektu, liczników brak)
+    constant ADDR_COMMAND_CLEAR_COUNTERS : byte_t := x"15";  -- implemented: Zerowanie liczników
     constant ADDR_COMMAND_RESET_CONFIG : byte_t := x"16";  -- accepted: Wartości domyślne w rejestrach oczekujących (dziś bez efektu)
     constant ADDR_COMMAND_READ_RECORD : byte_t := x"17";  -- implemented: Wysłanie ostatniego kompletnego rekordu
     constant ADDR_SYSTEM_CONTROL : byte_t := x"20";  -- planned: Bity ogólne
@@ -76,10 +76,10 @@ package regmap_pkg is
     constant ADDR_SYSTEM_STATUS : byte_t := x"80";  -- planned: Bity chwilowe: zegary, połączenie TCP, zegar ADC
     constant ADDR_SYSTEM_FLAGS : byte_t := x"81";  -- planned: Lepkie flagi zdarzeń
     constant ADDR_UPTIME : byte_t := x"82";  -- planned: Sekundy od resetu
-    constant ADDR_COUNTER_FRAMES_OK : byte_t := x"90";  -- planned: Poprawnie przetworzone ramki
-    constant ADDR_COUNTER_BAD_MAGIC : byte_t := x"91";  -- planned: Bajty lub ramki odrzucone przez zły magic
-    constant ADDR_COUNTER_UNKNOWN_COMMAND : byte_t := x"92";  -- planned: Nieznane komendy
-    constant ADDR_COUNTER_BAD_ADDRESS : byte_t := x"93";  -- planned: Dostępy do nieistniejących adresów
+    constant ADDR_COUNTER_FRAMES_OK : byte_t := x"90";  -- implemented: Poprawnie przetworzone ramki
+    constant ADDR_COUNTER_BAD_MAGIC : byte_t := x"91";  -- implemented: Bajty lub ramki odrzucone przez zły magic
+    constant ADDR_COUNTER_UNKNOWN_COMMAND : byte_t := x"92";  -- implemented: Nieznane komendy
+    constant ADDR_COUNTER_BAD_ADDRESS : byte_t := x"93";  -- implemented: Dostępy do nieistniejących adresów
     constant ADDR_ACQUISITION_STATE : byte_t := x"A0";  -- implemented: Stan akwizycji: 0 IDLE, 1 ARMED, 2 CAPTURE, 3 READY
     constant ADDR_ACQUISITION_WRITE_POINTER : byte_t := x"A1";  -- planned: Bieżący wskaźnik zapisu
     constant ADDR_ACQUISITION_TRIGGER_POINTER : byte_t := x"A2";  -- planned: Indeks próbki, w której nastąpiło wyzwolenie

@@ -64,7 +64,12 @@ Lista generowana z `regmap.yaml` (status `implemented`). Opisy uzupełnia się r
 | `0x11` | `ADDR_COMMAND_ARM` | Uzbrojenie akwizycji (IDLE lub READY → ARMED) |
 | `0x12` | `ADDR_COMMAND_STOP` | Zatrzymanie akwizycji, powrót do IDLE |
 | `0x13` | `ADDR_COMMAND_FORCE_TRIGGER` | Ręczne wyzwolenie z ARMED, start zapisu rekordu |
+| `0x15` | `ADDR_COMMAND_CLEAR_COUNTERS` | --- |
 | `0x17` | `ADDR_COMMAND_READ_RECORD` | Pobranie gotowego rekordu: odpowiedź i blok danych |
+| `0x90` | `ADDR_COUNTER_FRAMES_OK` | --- |
+| `0x91` | `ADDR_COUNTER_BAD_MAGIC` | --- |
+| `0x92` | `ADDR_COUNTER_UNKNOWN_COMMAND` | --- |
+| `0x93` | `ADDR_COUNTER_BAD_ADDRESS` | --- |
 | `0xA0` | `ADDR_ACQUISITION_STATE` | Stan akwizycji: 0 IDLE, 1 ARMED, 2 CAPTURE, 3 READY |
 | `0xA4` | `ADDR_ACQUISITION_RECORD_ID` | Numer ostatniego kompletnego rekordu |
 | `0xF0` | `ADDR_DEBUG_SCRATCH0` | Rejestr roboczy do testu toru |

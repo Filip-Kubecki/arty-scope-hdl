@@ -76,7 +76,7 @@ registers:
   - {name: COMMAND_STOP,              address: 0x12, access: wo,                   status: implemented, desc: "Zatrzymanie akwizycji, powrót do IDLE"}
   - {name: COMMAND_FORCE_TRIGGER,     address: 0x13, access: wo,                   status: implemented, desc: "Ręczne wyzwolenie z ARMED"}
   - {name: COMMAND_CLEAR_FLAGS,        address: 0x14, access: wo,                   status: accepted,    desc: "Kasowanie flag, dane = maska (dziś bez efektu)"}
-  - {name: COMMAND_CLEAR_COUNTERS,     address: 0x15, access: wo,                   status: accepted,    desc: "Zerowanie liczników (dziś bez efektu, liczników brak)"}
+  - {name: COMMAND_CLEAR_COUNTERS,     address: 0x15, access: wo,                   status: implemented,    desc: "Zerowanie liczników"}
   - {name: COMMAND_RESET_CONFIG,      address: 0x16, access: wo,                   status: accepted,    desc: "Wartości domyślne w rejestrach oczekujących (dziś bez efektu)"}
   - {name: COMMAND_READ_RECORD,       address: 0x17, access: wo,                   status: implemented, desc: "Wysłanie ostatniego kompletnego rekordu"}
 
@@ -111,10 +111,10 @@ registers:
   - {name: SYSTEM_FLAGS,              address: 0x81, access: ro,                   status: planned,     desc: "Lepkie flagi zdarzeń"}
   - {name: UPTIME,                    address: 0x82, access: ro,                   status: planned,     desc: "Sekundy od resetu"}
 
-  - {name: COUNTER_FRAMES_OK,         address: 0x90, access: ro,                   status: planned,     desc: "Poprawnie przetworzone ramki"}
-  - {name: COUNTER_BAD_MAGIC,         address: 0x91, access: ro,                   status: planned,     desc: "Bajty lub ramki odrzucone przez zły magic"}
-  - {name: COUNTER_UNKNOWN_COMMAND,   address: 0x92, access: ro,                   status: planned,     desc: "Nieznane komendy"}
-  - {name: COUNTER_BAD_ADDRESS,       address: 0x93, access: ro,                   status: planned,     desc: "Dostępy do nieistniejących adresów"}
+  - {name: COUNTER_FRAMES_OK,         address: 0x90, access: ro,                   status: implemented,     desc: "Poprawnie przetworzone ramki"}
+  - {name: COUNTER_BAD_MAGIC,         address: 0x91, access: ro,                   status: implemented,     desc: "Bajty lub ramki odrzucone przez zły magic"}
+  - {name: COUNTER_UNKNOWN_COMMAND,   address: 0x92, access: ro,                   status: implemented,     desc: "Nieznane komendy"}
+  - {name: COUNTER_BAD_ADDRESS,       address: 0x93, access: ro,                   status: implemented,     desc: "Dostępy do nieistniejących adresów"}
 
   - {name: ACQUISITION_STATE,         address: 0xA0, access: ro,                   status: implemented, desc: "Stan akwizycji: 0 IDLE, 1 ARMED, 2 CAPTURE, 3 READY"}
   - {name: ACQUISITION_WRITE_POINTER, address: 0xA1, access: ro,                   status: planned,     desc: "Bieżący wskaźnik zapisu"}

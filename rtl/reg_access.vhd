@@ -5,28 +5,21 @@ use work.regmap_pkg.all;
 
 -- =============================================================================
 -- reg_access.vhd
--- Obsługa zapisu i odczytu rejestrów sterujących: sprawdzenie adresu,
--- komendy i uprawnień, wykonanie operacji, budowa odpowiedzi.
+-- Obsługa zapisu i odczytu rejestrów: sprawdzenie adresu, komendy i uprawnień,
+-- wykonanie operacji, budowa odpowiedzi.
 --
--- Rejestry:
---   DEVICE_ID, PROTOCOL_VERSION, DEBUG_CONST   tylko odczyt
---   DEBUG_SCRATCH0, DEBUG_SCRATCH1             odczyt i zapis
---   DEBUG_LED                                  odczyt i zapis, bity [7:0] na debug_led
---   ACQUISITION_STATE, ACQUISITION_RECORD_ID   tylko odczyt, wartości z acquisition_ctrl
+-- Liczniki protokołu (zapis do rejestrów tylko przez COMMAND_CLEAR_COUNTERS):
+--   COUNTER_FRAMES_OK        ramki przekazane do obsługi (impuls z frame_rx)
+--   COUNTER_BAD_MAGIC        bajty odrzucone przy szukaniu magic (impuls z frame_rx)
+--   COUNTER_UNKNOWN_COMMAND  nieznane komendy
+--   COUNTER_BAD_ADDRESS      dostępy do adresów nieistniejących lub zarezerwowanych
 --
 -- Strefa komend 0x10-0x17: zapis daje RESPONSE_WRITE z danymi 0 i impuls
--- cmd_valid; odczyt daje ERROR_WRITE_ONLY. Adresy 0x18-0x1F są niewspierane.
+-- cmd_valid, z wyjątkiem CLEAR_COUNTERS (obsługiwany tutaj) i READ_RECORD
+-- (impuls record_req). Odczyt strefy komend daje ERROR_WRITE_ONLY.
 --
--- ADDR_COMMAND_READ_RECORD (0x17): nie generuje cmd_valid. Gdy stan akwizycji
--- to READY, zwraca RESPONSE_WRITE z danymi 0 i impuls record_req. Inaczej
--- ERROR_NOT_READY. Wysłanie bloku robi nadrzędny moduł po record_req.
---
--- Pozostałe adresy zwracają ERROR_BAD_ADDRESS. Komenda inna niż WRITE i READ
--- zwraca ERROR_UNKNOWN_COMMAND.
---
--- Czas: odpowiedź, cmd_valid i record_req pojawiają się takt po request_start.
+-- Czas: odpowiedź i impulsy wyjściowe pojawiają się takt po request_start.
 -- request_* muszą być stabilne do response_valid.
---
 -- Dane błędu: kod w najmłodszym bajcie, reszta zerowa.
 -- =============================================================================
 
@@ -35,49 +28,59 @@ entity reg_access is
         clk             : in  std_logic;
         rst             : in  std_logic;
 
-        -- Żądanie z ctrl_protocol
-        request_start   : in  std_logic;    -- impuls
+        -- żądanie z ctrl_protocol
+        request_start   : in  std_logic;
         request_cmd     : in  byte_t;
         request_addr    : in  byte_t;
         request_data    : in  word_t;
 
-        -- Odpowiedź (1 takt po request_start)
+        -- odpowiedź (1 takt po request_start)
         response_valid  : out std_logic;
-        response_cmd    : out byte_t;       -- pełny bajt odpowiedzi
-        response_addr   : out byte_t;       -- echo adresu
+        response_cmd    : out byte_t;
+        response_addr   : out byte_t;
         response_data   : out word_t;
 
-        -- Polecenie do logiki akwizycji (impuls, tylko zapisy do strefy komend)
+        -- polecenie do logiki akwizycji
         cmd_valid       : out std_logic;
         cmd_addr        : out byte_t;
 
-        -- Żądanie wysłania rekordu (impuls, tylko przy READ_RECORD gdy READY)
+        -- żądanie wysłania rekordu (tylko READ_RECORD przy stanie READY)
         record_req      : out std_logic;
 
-        -- Stan akwizycji (z acquisition_ctrl)
+        -- stan akwizycji
         acquisition_state     : in  byte_t;
         acquisition_record_id : in  word_t;
 
-        -- Wyjście debug
+        -- zdarzenia z parsera ramek (impulsy 1 takt)
+        frame_ok_pulse  : in  std_logic;
+        bad_magic_pulse : in  std_logic;
+
+        -- wyjście debugowe
         debug_led       : out byte_t
     );
 end entity reg_access;
 
 architecture rtl of reg_access is
 
-    -- Rejestry DEBUG_*: odczyt i zapis, bez wpływu na resztę układu
-    -- (służą do sprawdzenia toru komunikacji od komputera do FPGA i z powrotem)
-    signal debug_scratch0_r  : word_t := (others => '0');
-    signal debug_scratch1_r  : word_t := (others => '0');
-    signal debug_led_r       : word_t := (others => '0');
+    -- Rejestry DEBUG_*
+    signal debug_scratch0_r   : word_t := (others => '0');
+    signal debug_scratch1_r   : word_t := (others => '0');
+    signal debug_led_r        : word_t := (others => '0');
 
-    signal response_valid_r  : std_logic := '0';
-    signal response_cmd_r    : byte_t    := (others => '0');
-    signal response_addr_r   : byte_t    := (others => '0');
-    signal response_data_r   : word_t    := (others => '0');
-    signal cmd_valid_r       : std_logic := '0';
-    signal cmd_addr_r        : byte_t    := (others => '0');
-    signal record_req_r      : std_logic := '0';
+    -- Liczniki protokołu
+    signal counter_frames_ok        : unsigned(31 downto 0) := (others => '0');
+    signal counter_bad_magic        : unsigned(31 downto 0) := (others => '0');
+    signal counter_unknown_command  : unsigned(31 downto 0) := (others => '0');
+    signal counter_bad_address      : unsigned(31 downto 0) := (others => '0');
+
+    -- Wyjścia
+    signal response_valid_r   : std_logic := '0';
+    signal response_cmd_r     : byte_t    := (others => '0');
+    signal response_addr_r    : byte_t    := (others => '0');
+    signal response_data_r    : word_t    := (others => '0');
+    signal cmd_valid_r        : std_logic := '0';
+    signal cmd_addr_r         : byte_t    := (others => '0');
+    signal record_req_r       : std_logic := '0';
 
 begin
 
@@ -101,10 +104,22 @@ begin
             cmd_valid_r      <= '0';
             record_req_r     <= '0';
 
+            -- zdarzenia z parsera zwiększają liczniki niezależnie od żądania
+            if frame_ok_pulse = '1' then
+                counter_frames_ok <= counter_frames_ok + 1;
+            end if;
+            if bad_magic_pulse = '1' then
+                counter_bad_magic <= counter_bad_magic + 1;
+            end if;
+
             if rst = '1' then
-                debug_scratch0_r <= (others => '0');
-                debug_scratch1_r <= (others => '0');
-                debug_led_r      <= (others => '0');
+                debug_scratch0_r       <= (others => '0');
+                debug_scratch1_r       <= (others => '0');
+                debug_led_r            <= (others => '0');
+                counter_frames_ok      <= (others => '0');
+                counter_bad_magic      <= (others => '0');
+                counter_unknown_command <= (others => '0');
+                counter_bad_address    <= (others => '0');
 
             elsif request_start = '1' then
                 v_addr := to_integer(unsigned(request_addr));
@@ -114,6 +129,7 @@ begin
 
                 if request_cmd = COMMAND_WRITE then
 
+                    -- rejestry debug: zapis i odczyt
                     if request_addr = ADDR_DEBUG_SCRATCH0 then
                         debug_scratch0_r <= request_data;
                         v_data           := request_data;
@@ -126,13 +142,19 @@ begin
                         debug_led_r <= request_data;
                         v_data      := request_data;
 
+                    -- rejestry tylko do odczytu
                     elsif request_addr = ADDR_DEVICE_ID or request_addr = ADDR_PROTOCOL_VERSION
                           or request_addr = ADDR_DEBUG_CONST
                           or request_addr = ADDR_ACQUISITION_STATE
-                          or request_addr = ADDR_ACQUISITION_RECORD_ID then
+                          or request_addr = ADDR_ACQUISITION_RECORD_ID
+                          or request_addr = ADDR_COUNTER_FRAMES_OK
+                          or request_addr = ADDR_COUNTER_BAD_MAGIC
+                          or request_addr = ADDR_COUNTER_UNKNOWN_COMMAND
+                          or request_addr = ADDR_COUNTER_BAD_ADDRESS then
                         v_err  := true;
                         v_code := ERROR_READ_ONLY;
 
+                    -- odczyt rekordu: tylko gdy READY
                     elsif request_addr = ADDR_COMMAND_READ_RECORD then
                         if acquisition_state = x"03" then
                             record_req_r <= '1';
@@ -142,8 +164,16 @@ begin
                             v_code := ERROR_NOT_READY;
                         end if;
 
+                    -- czyszczenie liczników: obsługiwane tutaj, bez cmd_valid
+                    elsif request_addr = ADDR_COMMAND_CLEAR_COUNTERS then
+                        counter_frames_ok       <= (others => '0');
+                        counter_bad_magic       <= (others => '0');
+                        counter_unknown_command <= (others => '0');
+                        counter_bad_address     <= (others => '0');
+                        v_data                  := (others => '0');
+
+                    -- pozostałe komendy strefy 0x10-0x17
                     elsif v_addr >= 16 and v_addr <= 23 then
-                        -- strefa komend 0x10-0x17
                         cmd_valid_r <= '1';
                         cmd_addr_r  <= request_addr;
                         v_data      := (others => '0');
@@ -166,6 +196,18 @@ begin
 
                     elsif request_addr = ADDR_ACQUISITION_RECORD_ID then
                         v_data := acquisition_record_id;
+
+                    elsif request_addr = ADDR_COUNTER_FRAMES_OK then
+                        v_data := std_logic_vector(counter_frames_ok);
+
+                    elsif request_addr = ADDR_COUNTER_BAD_MAGIC then
+                        v_data := std_logic_vector(counter_bad_magic);
+
+                    elsif request_addr = ADDR_COUNTER_UNKNOWN_COMMAND then
+                        v_data := std_logic_vector(counter_unknown_command);
+
+                    elsif request_addr = ADDR_COUNTER_BAD_ADDRESS then
+                        v_data := std_logic_vector(counter_bad_address);
 
                     elsif request_addr = ADDR_DEBUG_SCRATCH0 then
                         v_data := debug_scratch0_r;
@@ -194,7 +236,16 @@ begin
                     v_code := ERROR_UNKNOWN_COMMAND;
                 end if;
 
-                -- Zbudowanie odpowiedzi
+                -- liczniki błędów
+                if v_err then
+                    if v_code = ERROR_UNKNOWN_COMMAND then
+                        counter_unknown_command <= counter_unknown_command + 1;
+                    elsif v_code = ERROR_BAD_ADDRESS then
+                        counter_bad_address <= counter_bad_address + 1;
+                    end if;
+                end if;
+
+                -- zbudowanie odpowiedzi
                 response_addr_r <= request_addr;
                 if v_err then
                     response_cmd_r  <= RESPONSE_ERROR;

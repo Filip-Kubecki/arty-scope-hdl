@@ -36,6 +36,7 @@ entity measurement_data_tx is
         -- System
         clk          : in  std_logic;
         rst          : in  std_logic;
+        link_up      : in  std_logic;
 
         start        : in  std_logic;   -- impuls: rozpocznij nadawanie
         record_id    : in  word_t;
@@ -115,7 +116,7 @@ begin
         if rising_edge(clk) then
             done_reg <= '0';
 
-            if rst = '1' then
+            if rst = '1' link_up = '0' then
                 state <= S_IDLE;
 
             else

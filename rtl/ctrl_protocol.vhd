@@ -117,7 +117,8 @@ begin
             req_data  => request_data,
             resp_done => resp_done_s,
             frame_ok  => frame_ok,
-            bad_magic => bad_magic);
+            bad_magic => bad_magic
+          );
 
     u_reg_access : entity work.reg_access
         port map (
@@ -136,7 +137,10 @@ begin
             record_req            => record_req,
             acquisition_state     => acquisition_state,
             acquisition_record_id => acquisition_record_id,
-            debug_led             => debug_led);
+            debug_led             => debug_led,
+            frame_ok_pulse  => frame_ok,
+            bad_magic_pulse => bad_magic
+          );
 
     u_frame_tx : entity work.frame_tx
         port map (
@@ -151,7 +155,8 @@ begin
             done      => frame_done,
             tx_data   => frame_tx_data,
             tx_valid  => frame_tx_valid,
-            tx_ready  => frame_tx_ready);
+            tx_ready  => frame_tx_ready
+          );
 
     -- Start bloku zaraz po zakończeniu 8-bajtowej odpowiedzi
     rec_start <= '1' when (rec_pending = '1' and frame_done = '1') else '0';
@@ -170,14 +175,16 @@ begin
             tx_valid     => rec_tx_valid,
             tx_ready     => rec_tx_ready,
             busy         => rec_busy,
-            done         => rec_done);
+            done         => rec_done,
+            link_up      => link_up
+          );
 
     -- sekwencja: READ_RECORD ustawia pending, po odpowiedzi startuje blok,
     -- po bloku active gaśnie
     process (clk)
     begin
         if rising_edge(clk) then
-            if rst = '1' then
+            if rst = '1' or link_up = '0' then
                 rec_pending <= '0';
                 rec_active  <= '0';
             else
