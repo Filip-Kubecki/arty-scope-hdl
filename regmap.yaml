@@ -1,0 +1,138 @@
+# regmap.yaml
+# Jedno źródło prawdy dla mapy rejestrów, stałych protokołu i kodów błędów.
+#
+# Generowane przez tools/gen_regmap.py:
+#   rtl/regmap_pkg.vhd          pakiet dla RTL i testbenchy
+#   tb/regmap_status.g.vhd      tablica adresów odpowiadających inaczej niż ERROR_BAD_ADDRESS
+#   docs/protocol.md            tabela między znacznikami REGMAP
+#
+# status:
+#   implemented  działa, odpowiedź inna niż ERROR_BAD_ADDRESS
+#   accepted     przyjmowane, bez efektu (odpowiedź jak dla implemented)
+#   planned      będzie w przyszłości, dziś ERROR_BAD_ADDRESS
+#   reserved     nigdy nie będzie użyte, dziś ERROR_BAD_ADDRESS
+#
+# Adresy niewymienione w registers (np. zarezerwowane zakresy) dają ERROR_BAD_ADDRESS.
+
+protocol_constants:
+  # Magic
+  - {name: MAGIC_0,              type: byte,    value: 0xC7, desc: "Magic, bajt 0"}
+  - {name: MAGIC_1,              type: byte,    value: 0xE2, desc: "Magic, bajt 1"}
+
+  # Komendy zapytań
+  - {name: COMMAND_WRITE,        type: byte,    value: 0x01, desc: "Zapis"}
+  - {name: COMMAND_READ,         type: byte,    value: 0x02, desc: "Odczyt"}
+
+  # Odpowiedzi (bit 7 ustawiony w komendzie zapytania)
+  - {name: COMMAND_RESPONSE_BIT, type: natural, value: 7,    desc: "Bit odpowiedzi"}
+  - {name: RESPONSE_WRITE,       type: byte,    value: 0x81, desc: "Odpowiedź na zapis"}
+  - {name: RESPONSE_READ,        type: byte,    value: 0x82, desc: "Odpowiedź na odczyt"}
+  - {name: RESPONSE_ERROR,       type: byte,    value: 0xFF, desc: "Odpowiedź błędu, kod w najmłodszym bajcie danych"}
+
+  # Blok danych rekordu
+  - {name: RECORD_TYPE_DATA,     type: byte,    value: 0xD0, desc: "Typ bloku danych"}
+  - {name: RECORD_HEADER_LENGTH, type: natural, value: 64,   desc: "Długość nagłówka w bajtach"}
+  - {name: RECORD_SAMPLE_BITS,   type: natural, value: 8,    desc: "Bity na próbkę (obecnie)"}
+
+  # Strefy adresów (dekoder sprawdza górne bity)
+  - {name: ZONE_ID_LO,           type: byte,    value: 0x00, desc: "Tożsamość, początek"}
+  - {name: ZONE_ID_HI,           type: byte,    value: 0x0F, desc: "Tożsamość, koniec"}
+  - {name: ZONE_COMMAND_LO,      type: byte,    value: 0x10, desc: "Komendy, początek"}
+  - {name: ZONE_COMMAND_HI,      type: byte,    value: 0x1F, desc: "Komendy, koniec"}
+  - {name: ZONE_CONFIG_LO,       type: byte,    value: 0x20, desc: "Konfiguracja, początek"}
+  - {name: ZONE_CONFIG_HI,       type: byte,    value: 0x7F, desc: "Konfiguracja, koniec"}
+  - {name: ZONE_STATUS_LO,       type: byte,    value: 0x80, desc: "Status, początek"}
+  - {name: ZONE_STATUS_HI,       type: byte,    value: 0xEF, desc: "Status, koniec"}
+  - {name: ZONE_DEBUG_LO,        type: byte,    value: 0xF0, desc: "Debug, początek"}
+  - {name: ZONE_DEBUG_HI,        type: byte,    value: 0xFF, desc: "Debug, koniec"}
+
+  # Bazy bloków kanałów
+  - {name: CHANNEL1_CONFIG,      type: byte,    value: 0x50, desc: "Baza konfiguracji kanału 1"}
+  - {name: CHANNEL2_CONFIG,      type: byte,    value: 0x60, desc: "Baza konfiguracji kanału 2"}
+
+errors:
+  - {name: ERROR_UNKNOWN_COMMAND, code: 0x01, desc: "Nierozpoznany bajt komendy"}
+  - {name: ERROR_BAD_ADDRESS,     code: 0x02, desc: "Adres nieistniejący, zarezerwowany lub niewspierany"}
+  - {name: ERROR_READ_ONLY,       code: 0x03, desc: "Zapis do rejestru tylko do odczytu"}
+  - {name: ERROR_WRITE_ONLY,      code: 0x04, desc: "Odczyt rejestru tylko do zapisu"}
+  - {name: ERROR_BAD_VALUE,       code: 0x05, desc: "Wartość niepoprawna albo niespójna konfiguracja przy COMMIT"}
+  - {name: ERROR_NOT_READY,       code: 0x06, desc: "Brak gotowego rekordu przy READ_RECORD"}
+
+registers:
+  # -------------------------------------------------------------------------
+  # Tożsamość (RO)
+  # -------------------------------------------------------------------------
+  - {name: DEVICE_ID,                 address: 0x00, access: ro, reset: 0x0000AB01, status: implemented, desc: "Identyfikator urządzenia (wartość przykładowa, do potwierdzenia)"}
+  - {name: PROTOCOL_VERSION,          address: 0x01, access: ro, reset: 0x00000001, status: implemented, desc: "Wersja protokołu"}
+  - {name: GATEWARE_VERSION,          address: 0x02, access: ro,                   status: planned,     desc: "Wersja projektu FPGA"}
+  - {name: BUILD_TIMESTAMP,           address: 0x03, access: ro,                   status: planned,     desc: "Data builda albo skrót commita"}
+  - {name: CAPABILITIES,              address: 0x04, access: ro,                   status: planned,     desc: "Liczba kanałów, maks. długość rekordu, częstotliwości"}
+
+  # -------------------------------------------------------------------------
+  # Komendy (WO, zapis uruchamia akcję)
+  # -------------------------------------------------------------------------
+  - {name: COMMAND_COMMIT,            address: 0x10, access: wo,                   status: accepted,    desc: "Zatwierdzenie konfiguracji oczekującej (dziś bez efektu)"}
+  - {name: COMMAND_ARM,               address: 0x11, access: wo,                   status: implemented, desc: "Uzbrojenie akwizycji"}
+  - {name: COMMAND_STOP,              address: 0x12, access: wo,                   status: implemented, desc: "Zatrzymanie akwizycji, powrót do IDLE"}
+  - {name: COMMAND_FORCE_TRIGGER,     address: 0x13, access: wo,                   status: implemented, desc: "Ręczne wyzwolenie z ARMED"}
+  - {name: COMMAND_CLEAR_FLAGS,        address: 0x14, access: wo,                   status: accepted,    desc: "Kasowanie flag, dane = maska (dziś bez efektu)"}
+  - {name: COMMAND_CLEAR_COUNTERS,     address: 0x15, access: wo,                   status: accepted,    desc: "Zerowanie liczników (dziś bez efektu, liczników brak)"}
+  - {name: COMMAND_RESET_CONFIG,      address: 0x16, access: wo,                   status: accepted,    desc: "Wartości domyślne w rejestrach oczekujących (dziś bez efektu)"}
+  - {name: COMMAND_READ_RECORD,       address: 0x17, access: wo,                   status: implemented, desc: "Wysłanie ostatniego kompletnego rekordu"}
+
+  # -------------------------------------------------------------------------
+  # Konfiguracja (RW, zaplanowana)
+  # -------------------------------------------------------------------------
+  - {name: SYSTEM_CONTROL,            address: 0x20, access: rw,                   status: planned,     desc: "Bity ogólne"}
+  - {name: ADC_TEST_PATTERN,          address: 0x21, access: rw,                   status: planned,     desc: "Wzorzec testowy zamiast próbek z ADC"}
+  - {name: ADC_DELAY,                 address: 0x22, access: rw,                   status: planned,     desc: "Opóźnienie wejścia ADC"}
+
+  - {name: ACQUISITION_MODE,          address: 0x30, access: rw,                   status: planned,     desc: "Auto, normal lub single"}
+  - {name: ACQUISITION_RECORD_LENGTH, address: 0x31, access: rw,                   status: planned,     desc: "Długość rekordu w próbkach na kanał"}
+  - {name: ACQUISITION_PRETRIGGER,    address: 0x32, access: rw,                   status: planned,     desc: "Próbki przed wyzwoleniem, na kanał"}
+  - {name: ACQUISITION_DECIMATION,    address: 0x33, access: rw,                   status: planned,     desc: "Zmniejszenie częstotliwości próbkowania"}
+  - {name: ACQUISITION_CHANNEL_MASK,  address: 0x34, access: rw,                   status: planned,     desc: "Maska kanałów: bit 0 = kanał 1, bit 1 = kanał 2, 0 niepoprawne"}
+
+  - {name: TRIGGER_SOURCE,            address: 0x40, access: rw,                   status: planned,     desc: "Kanał źródłowy wyzwalania"}
+  - {name: TRIGGER_EDGE,              address: 0x41, access: rw,                   status: planned,     desc: "Zbocze: narastające, opadające lub oba"}
+  - {name: TRIGGER_LEVEL,             address: 0x42, access: rw,                   status: planned,     desc: "Poziom w jednostkach ADC"}
+  - {name: TRIGGER_HYSTERESIS,        address: 0x43, access: rw,                   status: planned,     desc: "Pasmo wokół poziomu wyzwalania"}
+  - {name: TRIGGER_HOLDOFF,           address: 0x44, access: rw,                   status: planned,     desc: "Martwy czas po wyzwoleniu, w próbkach"}
+
+  - {name: CHANNEL1_GAIN,             address: 0x50, access: rw,                   status: planned,     desc: "Słowo wzmocnienia AD8370 i bit zakresu, kanał 1"}
+  - {name: CHANNEL1_OFFSET,           address: 0x51, access: rw,                   status: planned,     desc: "Kod DAC MCP4822, kanał 1"}
+  - {name: CHANNEL2_GAIN,             address: 0x60, access: rw,                   status: planned,     desc: "Słowo wzmocnienia AD8370 i bit zakresu, kanał 2"}
+  - {name: CHANNEL2_OFFSET,           address: 0x61, access: rw,                   status: planned,     desc: "Kod DAC MCP4822, kanał 2"}
+
+  # -------------------------------------------------------------------------
+  # Status (RO)
+  # -------------------------------------------------------------------------
+  - {name: SYSTEM_STATUS,             address: 0x80, access: ro,                   status: planned,     desc: "Bity chwilowe: zegary, połączenie TCP, zegar ADC"}
+  - {name: SYSTEM_FLAGS,              address: 0x81, access: ro,                   status: planned,     desc: "Lepkie flagi zdarzeń"}
+  - {name: UPTIME,                    address: 0x82, access: ro,                   status: planned,     desc: "Sekundy od resetu"}
+
+  - {name: COUNTER_FRAMES_OK,         address: 0x90, access: ro,                   status: planned,     desc: "Poprawnie przetworzone ramki"}
+  - {name: COUNTER_BAD_MAGIC,         address: 0x91, access: ro,                   status: planned,     desc: "Bajty lub ramki odrzucone przez zły magic"}
+  - {name: COUNTER_UNKNOWN_COMMAND,   address: 0x92, access: ro,                   status: planned,     desc: "Nieznane komendy"}
+  - {name: COUNTER_BAD_ADDRESS,       address: 0x93, access: ro,                   status: planned,     desc: "Dostępy do nieistniejących adresów"}
+
+  - {name: ACQUISITION_STATE,         address: 0xA0, access: ro,                   status: implemented, desc: "Stan akwizycji: 0 IDLE, 1 ARMED, 2 CAPTURE, 3 READY"}
+  - {name: ACQUISITION_WRITE_POINTER, address: 0xA1, access: ro,                   status: planned,     desc: "Bieżący wskaźnik zapisu"}
+  - {name: ACQUISITION_TRIGGER_POINTER, address: 0xA2, access: ro,                 status: planned,     desc: "Indeks próbki, w której nastąpiło wyzwolenie"}
+  - {name: ACQUISITION_SAMPLES,       address: 0xA3, access: ro,                   status: planned,     desc: "Zebrane próbki na kanał"}
+  - {name: ACQUISITION_RECORD_ID,     address: 0xA4, access: ro,                   status: implemented, desc: "Numer ostatniego kompletnego rekordu"}
+
+  - {name: CHANNEL1_APPLIED_GAIN,     address: 0xB0, access: ro,                   status: planned,     desc: "Wzmocnienie aktywne, kanał 1"}
+  - {name: CHANNEL1_APPLIED_OFFSET,   address: 0xB1, access: ro,                   status: planned,     desc: "Offset aktywny, kanał 1"}
+  - {name: CHANNEL1_FLAGS,            address: 0xB2, access: ro,                   status: planned,     desc: "Przesterowanie ADC (lepkie), zajętość SPI (chwilowa), kanał 1"}
+  - {name: CHANNEL2_APPLIED_GAIN,     address: 0xC0, access: ro,                   status: planned,     desc: "Wzmocnienie aktywne, kanał 2"}
+  - {name: CHANNEL2_APPLIED_OFFSET,   address: 0xC1, access: ro,                   status: planned,     desc: "Offset aktywny, kanał 2"}
+  - {name: CHANNEL2_FLAGS,            address: 0xC2, access: ro,                   status: planned,     desc: "Przesterowanie ADC (lepkie), zajętość SPI (chwilowa), kanał 2"}
+
+  # -------------------------------------------------------------------------
+  # Debug (do usunięcia w wersji końcowej)
+  # -------------------------------------------------------------------------
+  - {name: DEBUG_SCRATCH0,            address: 0xF0, access: rw,                   status: implemented, desc: "Rejestr roboczy, pierwszy test protokołu"}
+  - {name: DEBUG_SCRATCH1,            address: 0xF1, access: rw,                   status: implemented, desc: "Rejestr roboczy"}
+  - {name: DEBUG_LED,                 address: 0xF2, access: rw,                   status: implemented, desc: "Bity [7:0] sterują diodami na płytce"}
+  - {name: DEBUG_CONST,               address: 0xF3, access: ro, reset: 0xDEADBEEF, status: implemented, desc: "Stała do testu odczytu"}

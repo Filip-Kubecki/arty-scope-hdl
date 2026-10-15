@@ -1,3 +1,4 @@
+-- GENEROWANE z regmap.yaml. Nie edytuj ręcznie.
 library ieee;
 use ieee.std_logic_1164.all;
 
@@ -6,159 +7,94 @@ package regmap_pkg is
     subtype byte_t is std_logic_vector(7 downto 0);
     subtype word_t is std_logic_vector(31 downto 0);
 
-    -- -------------------------------------------------------------------------
-    -- Magic - oba bajty spoza ASCII (>= 0x80)
-    -- -------------------------------------------------------------------------
-    constant MAGIC_0 : byte_t := x"C7";
-    constant MAGIC_1 : byte_t := x"E2";
+    -- Stałe protokołu
+    constant MAGIC_0 : byte_t := x"C7";  -- Magic, bajt 0
+    constant MAGIC_1 : byte_t := x"E2";  -- Magic, bajt 1
+    constant COMMAND_WRITE : byte_t := x"01";  -- Zapis
+    constant COMMAND_READ : byte_t := x"02";  -- Odczyt
+    constant COMMAND_RESPONSE_BIT : natural := 7;  -- Bit odpowiedzi
+    constant RESPONSE_WRITE : byte_t := x"81";  -- Odpowiedź na zapis
+    constant RESPONSE_READ : byte_t := x"82";  -- Odpowiedź na odczyt
+    constant RESPONSE_ERROR : byte_t := x"FF";  -- Odpowiedź błędu, kod w najmłodszym bajcie danych
+    constant RECORD_TYPE_DATA : byte_t := x"D0";  -- Typ bloku danych
+    constant RECORD_HEADER_LENGTH : natural := 64;  -- Długość nagłówka w bajtach
+    constant RECORD_SAMPLE_BITS : natural := 8;  -- Bity na próbkę (obecnie)
+    constant ZONE_ID_LO : byte_t := x"00";  -- Tożsamość, początek
+    constant ZONE_ID_HI : byte_t := x"0F";  -- Tożsamość, koniec
+    constant ZONE_COMMAND_LO : byte_t := x"10";  -- Komendy, początek
+    constant ZONE_COMMAND_HI : byte_t := x"1F";  -- Komendy, koniec
+    constant ZONE_CONFIG_LO : byte_t := x"20";  -- Konfiguracja, początek
+    constant ZONE_CONFIG_HI : byte_t := x"7F";  -- Konfiguracja, koniec
+    constant ZONE_STATUS_LO : byte_t := x"80";  -- Status, początek
+    constant ZONE_STATUS_HI : byte_t := x"EF";  -- Status, koniec
+    constant ZONE_DEBUG_LO : byte_t := x"F0";  -- Debug, początek
+    constant ZONE_DEBUG_HI : byte_t := x"FF";  -- Debug, koniec
+    constant CHANNEL1_CONFIG : byte_t := x"50";  -- Baza konfiguracji kanału 1
+    constant CHANNEL2_CONFIG : byte_t := x"60";  -- Baza konfiguracji kanału 2
 
-    -- -------------------------------------------------------------------------
-    -- Komendy zapytań
-    -- -------------------------------------------------------------------------
-    constant COMMAND_WRITE          : byte_t := x"01";
-    constant COMMAND_READ           : byte_t := x"02";
-
-    -- Odpowiedzi - bit 7 ustawiony na High w komendzie zapytania
-    constant COMMAND_RESPONSE_BIT   : natural := 7;
-    constant RESPONSE_WRITE         : byte_t := x"81";
-    constant RESPONSE_READ          : byte_t := x"82";
-    constant RESPONSE_ERROR         : byte_t := x"FF";  -- kod błędu w najmłodszym bajcie danych
-
-    -- -------------------------------------------------------------------------
     -- Kody błędów
-    -- -------------------------------------------------------------------------
-    constant ERROR_UNKNOWN_COMMAND  : byte_t := x"01";
-    constant ERROR_BAD_ADDRESS      : byte_t := x"02";  -- także adresy zarezerwowane
-    constant ERROR_READ_ONLY        : byte_t := x"03";
-    constant ERROR_WRITE_ONLY       : byte_t := x"04";
-    constant ERROR_BAD_VALUE        : byte_t := x"05";  -- też COMMIT z niespójną konfiguracją; wtedy nic nie zostaje zastosowane
-    constant ERROR_NOT_READY        : byte_t := x"06";  -- brak gotowego rekordu przy ADDR_COMMAND_READ_RECORD
+    constant ERROR_UNKNOWN_COMMAND : byte_t := x"01";  -- Nierozpoznany bajt komendy
+    constant ERROR_BAD_ADDRESS : byte_t := x"02";  -- Adres nieistniejący, zarezerwowany lub niewspierany
+    constant ERROR_READ_ONLY : byte_t := x"03";  -- Zapis do rejestru tylko do odczytu
+    constant ERROR_WRITE_ONLY : byte_t := x"04";  -- Odczyt rejestru tylko do zapisu
+    constant ERROR_BAD_VALUE : byte_t := x"05";  -- Wartość niepoprawna albo niespójna konfiguracja przy COMMIT
+    constant ERROR_NOT_READY : byte_t := x"06";  -- Brak gotowego rekordu przy READ_RECORD
 
-    -- -------------------------------------------------------------------------
-    -- Blok danych rekordu
-    -- -------------------------------------------------------------------------
-    constant RECORD_TYPE_DATA       : byte_t  := x"D0";
-    constant RECORD_HEADER_LENGTH   : natural := 64;   -- bajty
-    constant RECORD_SAMPLE_BITS     : natural := 8;    -- bity na próbkę (obecnie); zmiana wpływa na PAYLOAD_LEN
-
-    -- -------------------------------------------------------------------------
-    -- Typy dostępu
-    -- -------------------------------------------------------------------------
-    type access_t is (ACCESS_NONE, ACCESS_READ_ONLY, ACCESS_WRITE_ONLY, ACCESS_READ_WRITE);
-
-    -- -------------------------------------------------------------------------
-    -- Zakresy stref - dekoder sprawdza górne bity adresu
-    -- -------------------------------------------------------------------------
-    constant ZONE_ID_LO             : byte_t := x"00";  -- 0x00-0x0F tożsamość, RO
-    constant ZONE_ID_HI             : byte_t := x"0F";
-    constant ZONE_COMMAND_LO        : byte_t := x"10";  -- 0x10-0x1F komendy, WO (odczyt daje ERROR_WRITE_ONLY)
-    constant ZONE_COMMAND_HI        : byte_t := x"1F";
-    constant ZONE_CONFIG_LO         : byte_t := x"20";  -- 0x20-0x7F konfiguracja, RW (zapis do oczekującej kopii)
-    constant ZONE_CONFIG_HI         : byte_t := x"7F";
-    constant ZONE_STATUS_LO         : byte_t := x"80";  -- 0x80-0xEF status, RO
-    constant ZONE_STATUS_HI         : byte_t := x"EF";
-    constant ZONE_DEBUG_LO          : byte_t := x"F0";  -- 0xF0-0xFF debug, uprawnienia per rejestr; do usunięcia w wersji końcowej
-    constant ZONE_DEBUG_HI          : byte_t := x"FF";
-
-    -- -------------------------------------------------------------------------
-    -- Tożsamość urządzenia (Read Only)
-    -- -------------------------------------------------------------------------
-    constant ADDR_DEVICE_ID         : byte_t := x"00";  -- stała identyfikująca typ urządzenia
-    constant ADDR_PROTOCOL_VERSION  : byte_t := x"01";  -- zgodność sprawdzana po wersji protokołu
-    constant ADDR_GATEWARE_VERSION  : byte_t := x"02";  -- wersja projektu FPGA
-    constant ADDR_BUILD_TIMESTAMP   : byte_t := x"03";  -- data builda albo skrót commita
-    constant ADDR_CAPABILITIES      : byte_t := x"04";  -- pole bitowe: liczba kanałów, max długość rekordu, częstotliwości
-
-    -- Wartości tożsamości            TODO: do uzupełnienia w ostatecznym pierwszym buildzie w release
-    constant VAL_DEVICE_ID          : word_t := x"0000AB01";  -- przykładowa
-    constant VAL_PROTOCOL_VERSION   : word_t := x"00000001";
-
-    -- -------------------------------------------------------------------------
-    -- Komendy (Write Only, zapis uruchamia akcję, wartość w danych ignorowana
-    -- chyba że zaznaczono inaczej)
-    -- -------------------------------------------------------------------------
-    constant ADDR_COMMAND_COMMIT         : byte_t := x"10";  -- zapisuje wszystkie wartości oczekujące do aktywnych naraz, między przechwyceniami; przy niespójności ERROR_BAD_VALUE i nic nie zmienia
-    constant ADDR_COMMAND_ARM            : byte_t := x"11";  -- uzbraja akwizycję, czeka na trigger
-    constant ADDR_COMMAND_STOP           : byte_t := x"12";  -- zatrzymuje akwizycję, nie zmienia konfiguracji
-    constant ADDR_COMMAND_FORCE_TRIGGER  : byte_t := x"13";  -- wyzwala od razu, bez czekania na warunek zbocza/poziomu
-    constant ADDR_COMMAND_CLEAR_FLAGS    : byte_t := x"14";  -- DANE = MASKA: kasuje lepkie flagi, których bit jest 1 (dane NIE są ignorowane)
-    constant ADDR_COMMAND_CLEAR_COUNTERS : byte_t := x"15";  -- zeruje liczniki protokołu (0x90-0x93), UPTIME bez zmian
-    constant ADDR_COMMAND_RESET_CONFIG   : byte_t := x"16";  -- ustawia wartości domyślne w rejestrach OCZEKUJĄCYCH; aktywne zmieni dopiero COMMIT
-    constant ADDR_COMMAND_READ_RECORD    : byte_t := x"17";  -- model pull: wysyła ostatni kompletny rekord po odpowiedzi; bez gotowego rekordu ERROR_NOT_READY (protocol.md, sekcja 9)
-
-    -- -------------------------------------------------------------------------
-    -- Konfiguracja (Read-Write, odczyt zwraca wartość oczekującą)
-    -- -------------------------------------------------------------------------
-
-    -- System i sprzęt
-    constant ADDR_SYSTEM_CONTROL         : byte_t := x"20";  -- bity ogólne
-    constant ADDR_ADC_TEST_PATTERN       : byte_t := x"21";  -- wzorzec zamiast próbek z ADC, do testu magistrali danych
-    constant ADDR_ADC_DELAY              : byte_t := x"22";  -- opóźnienie wejścia ADC, wyrównuje dane do zegara
-
-    -- Akwizycja
-    constant ADDR_ACQUISITION_MODE           : byte_t := x"30";  -- auto / normal / single
-    constant ADDR_ACQUISITION_RECORD_LENGTH  : byte_t := x"31";  -- w próbkach NA KANAŁ, nie łącznie
-    constant ADDR_ACQUISITION_PRETRIGGER     : byte_t := x"32";  -- próbki przed wyzwoleniem, na kanał
-    constant ADDR_ACQUISITION_DECIMATION     : byte_t := x"33";  -- zmniejszenie częstotliwości próbkowania
-    constant ADDR_ACQUISITION_CHANNEL_MASK   : byte_t := x"34";  -- bit 0 = kanał 1, bit 1 = kanał 2; wartość 0 niepoprawna
-
-    -- Trigger
-    constant ADDR_TRIGGER_SOURCE         : byte_t := x"40";  -- kanał źródłowy; musi być włączony w CHANNEL_MASK, sprawdzane przy COMMIT, nie przy zapisie
-    constant ADDR_TRIGGER_EDGE           : byte_t := x"41";  -- zbocze narastające, opadające lub oba
-    constant ADDR_TRIGGER_LEVEL          : byte_t := x"42";  -- poziom w jednostkach ADC
-    constant ADDR_TRIGGER_HYSTERESIS     : byte_t := x"43";  -- pasmo wokół poziomu wyzwalania. Zapobiega ciągłym wyzwoleniom przy sygnale/szumie blisko granicy wyzwalania
-    constant ADDR_TRIGGER_HOLDOFF        : byte_t := x"44";  -- martwy czas po wyzwoleniu, w próbkach; w tym czasie trigger ignorowany
-
-    -- Kanał 1
-    constant CHANNEL1_CONFIG              : byte_t := x"50";
-    constant ADDR_CHANNEL1_GAIN           : byte_t := x"50";  -- słowo wzmocnienia AD8370 + bit zakresu
-    constant ADDR_CHANNEL1_OFFSET         : byte_t := x"51";  -- kod DAC MCP4822
-
-    -- Kanał 2
-    constant CHANNEL2_CONFIG              : byte_t := x"60";
-    constant ADDR_CHANNEL2_GAIN           : byte_t := x"60";
-    constant ADDR_CHANNEL2_OFFSET         : byte_t := x"61";
-
-    -- -------------------------------------------------------------------------
-    -- Status (Read Only)
-    -- -------------------------------------------------------------------------
-
-    -- Stan układu
-    constant ADDR_SYSTEM_STATUS          : byte_t := x"80";  -- bity chwilowe: zegary, połączenie TCP, zegar ADC
-    constant ADDR_SYSTEM_FLAGS           : byte_t := x"81";  -- LEPKIE: ustawiają się na zdarzenie, kasowane przez COMMAND_CLEAR_FLAGS z maską
-    constant ADDR_UPTIME                 : byte_t := x"82";  -- sekundy od resetu; spadek oznacza restart urządzenia
-
-    -- Liczniki protokołu
-    constant ADDR_COUNTER_FRAMES_OK      : byte_t := x"90";  -- poprawnie przetworzone ramki
-    constant ADDR_COUNTER_BAD_MAGIC      : byte_t := x"91";  -- bajty lub ramki odrzucone przez zły magic
-    constant ADDR_COUNTER_UNKNOWN_COMMAND: byte_t := x"92";
-    constant ADDR_COUNTER_BAD_ADDRESS    : byte_t := x"93";
-
-    -- Status akwizycji
-    constant ADDR_ACQUISITION_STATE          : byte_t := x"A0";  -- bezczynny / uzbrojony / wyzwolony / gotowy
-    constant ADDR_ACQUISITION_WRITE_POINTER  : byte_t := x"A1";  -- bieżący wskaźnik zapisu
-    constant ADDR_ACQUISITION_TRIGGER_POINTER: byte_t := x"A2";  -- indeks próbki, w której nastąpiło wyzwolenie
-    constant ADDR_ACQUISITION_SAMPLES        : byte_t := x"A3";  -- zebrane próbki na kanał
-    constant ADDR_ACQUISITION_RECORD_ID      : byte_t := x"A4";  -- rośnie po każdym kompletnym rekordzie
-
-    -- Status kanału 1
-    constant ADDR_CHANNEL1_APPLIED_GAIN   : byte_t := x"B0";  -- lustro wartości AKTYWNEJ; porównanie z oczekującą potwierdza COMMIT
-    constant ADDR_CHANNEL1_APPLIED_OFFSET : byte_t := x"B1";  -- lustro wartości AKTYWNEJ
-    constant ADDR_CHANNEL1_FLAGS          : byte_t := x"B2";  -- bit przesterowania LEPKI; bit zajętości SPI CHWILOWY
-
-    -- Status kanału 2
-    constant ADDR_CHANNEL2_APPLIED_GAIN   : byte_t := x"C0";
-    constant ADDR_CHANNEL2_APPLIED_OFFSET : byte_t := x"C1";
-    constant ADDR_CHANNEL2_FLAGS          : byte_t := x"C2";
-
-    -- -------------------------------------------------------------------------
-    -- DEBUG (uprawnienia per rejestr)
-    -- -------------------------------------------------------------------------
-    constant ADDR_DEBUG_SCRATCH0    : byte_t := x"F0";       -- R/W, pierwszy test protokołu end-to-end
-    constant ADDR_DEBUG_SCRATCH1    : byte_t := x"F1";       -- R/W, rejestr roboczy
-    constant ADDR_DEBUG_LED         : byte_t := x"F2";       -- R/W, bity sterują diodami na płytce
-    constant ADDR_DEBUG_CONST       : byte_t := x"F3";       -- R, zawsze VAL_DEBUG_CONST (test odczytu)
-
-    constant VAL_DEBUG_CONST        : word_t := x"DEADBEEF"; -- R
+    -- Adresy rejestrów i komend (wszystkie statusy)
+    constant ADDR_DEVICE_ID : byte_t := x"00";  -- implemented: Identyfikator urządzenia (wartość przykładowa, do potwierdzenia)
+    constant VAL_DEVICE_ID : word_t := x"0000AB01";
+    constant ADDR_PROTOCOL_VERSION : byte_t := x"01";  -- implemented: Wersja protokołu
+    constant VAL_PROTOCOL_VERSION : word_t := x"00000001";
+    constant ADDR_GATEWARE_VERSION : byte_t := x"02";  -- planned: Wersja projektu FPGA
+    constant ADDR_BUILD_TIMESTAMP : byte_t := x"03";  -- planned: Data builda albo skrót commita
+    constant ADDR_CAPABILITIES : byte_t := x"04";  -- planned: Liczba kanałów, maks. długość rekordu, częstotliwości
+    constant ADDR_COMMAND_COMMIT : byte_t := x"10";  -- accepted: Zatwierdzenie konfiguracji oczekującej (dziś bez efektu)
+    constant ADDR_COMMAND_ARM : byte_t := x"11";  -- implemented: Uzbrojenie akwizycji
+    constant ADDR_COMMAND_STOP : byte_t := x"12";  -- implemented: Zatrzymanie akwizycji, powrót do IDLE
+    constant ADDR_COMMAND_FORCE_TRIGGER : byte_t := x"13";  -- implemented: Ręczne wyzwolenie z ARMED
+    constant ADDR_COMMAND_CLEAR_FLAGS : byte_t := x"14";  -- accepted: Kasowanie flag, dane = maska (dziś bez efektu)
+    constant ADDR_COMMAND_CLEAR_COUNTERS : byte_t := x"15";  -- accepted: Zerowanie liczników (dziś bez efektu, liczników brak)
+    constant ADDR_COMMAND_RESET_CONFIG : byte_t := x"16";  -- accepted: Wartości domyślne w rejestrach oczekujących (dziś bez efektu)
+    constant ADDR_COMMAND_READ_RECORD : byte_t := x"17";  -- implemented: Wysłanie ostatniego kompletnego rekordu
+    constant ADDR_SYSTEM_CONTROL : byte_t := x"20";  -- planned: Bity ogólne
+    constant ADDR_ADC_TEST_PATTERN : byte_t := x"21";  -- planned: Wzorzec testowy zamiast próbek z ADC
+    constant ADDR_ADC_DELAY : byte_t := x"22";  -- planned: Opóźnienie wejścia ADC
+    constant ADDR_ACQUISITION_MODE : byte_t := x"30";  -- planned: Auto, normal lub single
+    constant ADDR_ACQUISITION_RECORD_LENGTH : byte_t := x"31";  -- planned: Długość rekordu w próbkach na kanał
+    constant ADDR_ACQUISITION_PRETRIGGER : byte_t := x"32";  -- planned: Próbki przed wyzwoleniem, na kanał
+    constant ADDR_ACQUISITION_DECIMATION : byte_t := x"33";  -- planned: Zmniejszenie częstotliwości próbkowania
+    constant ADDR_ACQUISITION_CHANNEL_MASK : byte_t := x"34";  -- planned: Maska kanałów: bit 0 = kanał 1, bit 1 = kanał 2, 0 niepoprawne
+    constant ADDR_TRIGGER_SOURCE : byte_t := x"40";  -- planned: Kanał źródłowy wyzwalania
+    constant ADDR_TRIGGER_EDGE : byte_t := x"41";  -- planned: Zbocze: narastające, opadające lub oba
+    constant ADDR_TRIGGER_LEVEL : byte_t := x"42";  -- planned: Poziom w jednostkach ADC
+    constant ADDR_TRIGGER_HYSTERESIS : byte_t := x"43";  -- planned: Pasmo wokół poziomu wyzwalania
+    constant ADDR_TRIGGER_HOLDOFF : byte_t := x"44";  -- planned: Martwy czas po wyzwoleniu, w próbkach
+    constant ADDR_CHANNEL1_GAIN : byte_t := x"50";  -- planned: Słowo wzmocnienia AD8370 i bit zakresu, kanał 1
+    constant ADDR_CHANNEL1_OFFSET : byte_t := x"51";  -- planned: Kod DAC MCP4822, kanał 1
+    constant ADDR_CHANNEL2_GAIN : byte_t := x"60";  -- planned: Słowo wzmocnienia AD8370 i bit zakresu, kanał 2
+    constant ADDR_CHANNEL2_OFFSET : byte_t := x"61";  -- planned: Kod DAC MCP4822, kanał 2
+    constant ADDR_SYSTEM_STATUS : byte_t := x"80";  -- planned: Bity chwilowe: zegary, połączenie TCP, zegar ADC
+    constant ADDR_SYSTEM_FLAGS : byte_t := x"81";  -- planned: Lepkie flagi zdarzeń
+    constant ADDR_UPTIME : byte_t := x"82";  -- planned: Sekundy od resetu
+    constant ADDR_COUNTER_FRAMES_OK : byte_t := x"90";  -- planned: Poprawnie przetworzone ramki
+    constant ADDR_COUNTER_BAD_MAGIC : byte_t := x"91";  -- planned: Bajty lub ramki odrzucone przez zły magic
+    constant ADDR_COUNTER_UNKNOWN_COMMAND : byte_t := x"92";  -- planned: Nieznane komendy
+    constant ADDR_COUNTER_BAD_ADDRESS : byte_t := x"93";  -- planned: Dostępy do nieistniejących adresów
+    constant ADDR_ACQUISITION_STATE : byte_t := x"A0";  -- implemented: Stan akwizycji: 0 IDLE, 1 ARMED, 2 CAPTURE, 3 READY
+    constant ADDR_ACQUISITION_WRITE_POINTER : byte_t := x"A1";  -- planned: Bieżący wskaźnik zapisu
+    constant ADDR_ACQUISITION_TRIGGER_POINTER : byte_t := x"A2";  -- planned: Indeks próbki, w której nastąpiło wyzwolenie
+    constant ADDR_ACQUISITION_SAMPLES : byte_t := x"A3";  -- planned: Zebrane próbki na kanał
+    constant ADDR_ACQUISITION_RECORD_ID : byte_t := x"A4";  -- implemented: Numer ostatniego kompletnego rekordu
+    constant ADDR_CHANNEL1_APPLIED_GAIN : byte_t := x"B0";  -- planned: Wzmocnienie aktywne, kanał 1
+    constant ADDR_CHANNEL1_APPLIED_OFFSET : byte_t := x"B1";  -- planned: Offset aktywny, kanał 1
+    constant ADDR_CHANNEL1_FLAGS : byte_t := x"B2";  -- planned: Przesterowanie ADC (lepkie), zajętość SPI (chwilowa), kanał 1
+    constant ADDR_CHANNEL2_APPLIED_GAIN : byte_t := x"C0";  -- planned: Wzmocnienie aktywne, kanał 2
+    constant ADDR_CHANNEL2_APPLIED_OFFSET : byte_t := x"C1";  -- planned: Offset aktywny, kanał 2
+    constant ADDR_CHANNEL2_FLAGS : byte_t := x"C2";  -- planned: Przesterowanie ADC (lepkie), zajętość SPI (chwilowa), kanał 2
+    constant ADDR_DEBUG_SCRATCH0 : byte_t := x"F0";  -- implemented: Rejestr roboczy, pierwszy test protokołu
+    constant ADDR_DEBUG_SCRATCH1 : byte_t := x"F1";  -- implemented: Rejestr roboczy
+    constant ADDR_DEBUG_LED : byte_t := x"F2";  -- implemented: Bity [7:0] sterują diodami na płytce
+    constant ADDR_DEBUG_CONST : byte_t := x"F3";  -- implemented: Stała do testu odczytu
+    constant VAL_DEBUG_CONST : word_t := x"DEADBEEF";
 
 end package regmap_pkg;
