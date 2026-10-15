@@ -14,6 +14,7 @@ VHDL design for a digital oscilloscope built on the Digilent Arty A7 100T (Artix
 ## Related repositories
 
 - PCB: [arty-scope-expansion-board](https://github.com/Filip-Kubecki/arty-scope-expansion-board)
+- Host App: [OscilloscopeApp](https://github.com/Filip-Kubecki/OscilloscopeApp)
 
 ## Repository structure
 
