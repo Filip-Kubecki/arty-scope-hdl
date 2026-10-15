@@ -116,7 +116,7 @@ begin
         if rising_edge(clk) then
             done_reg <= '0';
 
-            if rst = '1' link_up = '0' then
+            if rst = '1' or link_up = '0' then
                 state <= S_IDLE;
 
             else
