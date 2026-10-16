@@ -8,13 +8,25 @@ use work.regmap_pkg.all;
 -- Obsługa zapisu i odczytu rejestrów: sprawdzenie adresu, komendy i uprawnień,
 -- wykonanie operacji, budowa odpowiedzi.
 --
--- Konfiguracja (dwie kopie, oczekująca i aktywna):
---   ACQUISITION_RECORD_LENGTH, ACQUISITION_CHANNEL_MASK
---     zapis trafia do kopii oczekującej (walidacja przy zapisie, zła wartość -> ERROR_BAD_VALUE)
---     odczyt zwraca kopię oczekującą
---   COMMAND_COMMIT: kopiuje oczekującą do aktywnej, tylko w stanie IDLE;
---     w innym stanie -> ERROR_BAD_VALUE, nic nie zmienia
---   COMMAND_RESET_CONFIG: wartości domyślne do kopii oczekującej
+-- Konfiguracja (kopia oczekująca i aktywna):
+--   ACQUISITION_RECORD_LENGTH   1..RECORD_MAX_SAMPLES
+--   ACQUISITION_CHANNEL_MASK    bit 0 = ch1, bit 1 = ch2; 0 niepoprawne
+--   ACQUISITION_PRETRIGGER      0..RECORD_MAX_SAMPLES-1
+--   TRIGGER_SOURCE              0x00 ch1, 0x01 ch2
+--   TRIGGER_EDGE                0x00 narastająca, 0x01 opadająca, 0x02 obie
+--   TRIGGER_LEVEL               0..255 (kody ADC)
+--   TRIGGER_HYSTERESIS          0..255 (kody ADC)
+--   Zapis: wartość poza zakresem -> ERROR_BAD_VALUE, poprzednia zostaje.
+--   Odczyt: kopia oczekująca.
+--
+--   COMMAND_COMMIT: kopiuje oczekującą do aktywnej, tylko w IDLE.
+--     Reguły krzyżowe: pre < N, źródło wyzwalania włączone w masce kanałów.
+--     Naruszenie -> ERROR_BAD_VALUE, nic nie zmienia.
+--   COMMAND_RESET_CONFIG: wartości domyślne do kopii oczekującej.
+--
+-- Stan akwizycji tylko do odczytu:
+--   ACQUISITION_WRITE_POINTER    bieżący adres zapisu w buforze cyklicznym
+--   ACQUISITION_TRIGGER_POINTER  adres próbki wyzwalającej (zapamiętany w chwili wyzwolenia)
 --
 -- Liczniki protokołu (zapis do rejestrów tylko przez COMMAND_CLEAR_COUNTERS):
 --   COUNTER_FRAMES_OK, COUNTER_BAD_MAGIC (impulsy z frame_rx)
@@ -53,13 +65,20 @@ entity reg_access is
         -- żądanie wysłania rekordu (tylko READ_RECORD przy stanie READY)
         record_req      : out std_logic;
 
-        -- konfiguracja aktywna (dla akwizycji i nadajnika rekordu)
-        active_record_length : out word_t;
-        active_channel_mask  : out byte_t;
+        -- konfiguracja aktywna
+        active_record_length      : out word_t;
+        active_channel_mask       : out byte_t;
+        active_pre_length         : out word_t;
+        active_trigger_source     : out byte_t;
+        active_trigger_edge       : out byte_t;
+        active_trigger_level      : out byte_t;
+        active_trigger_hysteresis : out byte_t;
 
         -- stan akwizycji
-        acquisition_state     : in  byte_t;
-        acquisition_record_id : in  word_t;
+        acquisition_state           : in  byte_t;
+        acquisition_record_id       : in  word_t;
+        acquisition_write_pointer   : in  unsigned(12 downto 0);
+        acquisition_trigger_pointer : in  unsigned(12 downto 0);
 
         -- zdarzenia z parsera ramek (impulsy 1 takt)
         frame_ok_pulse  : in  std_logic;
@@ -72,16 +91,36 @@ end entity reg_access;
 
 architecture rtl of reg_access is
 
-    -- Rejestry DEBUG_*
-    signal debug_scratch0_r   : word_t := (others => '0');
-    signal debug_scratch1_r   : word_t := (others => '0');
-    signal debug_led_r        : word_t := (others => '0');
+    constant DEFAULT_RECORD_LENGTH : word_t := std_logic_vector(to_unsigned(RECORD_MAX_SAMPLES, 32));
+    constant DEFAULT_CHANNEL_MASK  : byte_t := x"01";
+    constant DEFAULT_PRE_LENGTH    : word_t := (others => '0');
+    constant DEFAULT_TRIG_SOURCE   : byte_t := x"00";
+    constant DEFAULT_TRIG_EDGE     : byte_t := x"00";
+    constant DEFAULT_TRIG_LEVEL    : byte_t := x"80";
+    constant DEFAULT_TRIG_HYST     : byte_t := x"00";
 
-    -- Konfiguracja: kopia oczekująca i aktywna
-    signal pending_record_length : word_t := std_logic_vector(to_unsigned(RECORD_MAX_SAMPLES, 32));
-    signal pending_channel_mask  : byte_t := x"01";
-    signal active_record_length_r : word_t := std_logic_vector(to_unsigned(RECORD_MAX_SAMPLES, 32));
-    signal active_channel_mask_r  : byte_t := x"01";
+    -- Rejestry DEBUG_*
+    signal debug_scratch0_r : word_t := (others => '0');
+    signal debug_scratch1_r : word_t := (others => '0');
+    signal debug_led_r      : word_t := (others => '0');
+
+    -- Konfiguracja: kopia oczekująca
+    signal pending_record_length      : word_t := DEFAULT_RECORD_LENGTH;
+    signal pending_channel_mask       : byte_t := DEFAULT_CHANNEL_MASK;
+    signal pending_pre_length         : word_t := DEFAULT_PRE_LENGTH;
+    signal pending_trigger_source     : byte_t := DEFAULT_TRIG_SOURCE;
+    signal pending_trigger_edge       : byte_t := DEFAULT_TRIG_EDGE;
+    signal pending_trigger_level      : byte_t := DEFAULT_TRIG_LEVEL;
+    signal pending_trigger_hysteresis : byte_t := DEFAULT_TRIG_HYST;
+
+    -- Konfiguracja: kopia aktywna
+    signal active_record_length_r      : word_t := DEFAULT_RECORD_LENGTH;
+    signal active_channel_mask_r       : byte_t := DEFAULT_CHANNEL_MASK;
+    signal active_pre_length_r         : word_t := DEFAULT_PRE_LENGTH;
+    signal active_trigger_source_r     : byte_t := DEFAULT_TRIG_SOURCE;
+    signal active_trigger_edge_r       : byte_t := DEFAULT_TRIG_EDGE;
+    signal active_trigger_level_r      : byte_t := DEFAULT_TRIG_LEVEL;
+    signal active_trigger_hysteresis_r : byte_t := DEFAULT_TRIG_HYST;
 
     -- Liczniki protokołu
     signal counter_frames_ok        : unsigned(31 downto 0) := (others => '0');
@@ -90,26 +129,31 @@ architecture rtl of reg_access is
     signal counter_bad_address      : unsigned(31 downto 0) := (others => '0');
 
     -- Wyjścia
-    signal response_valid_r   : std_logic := '0';
-    signal response_cmd_r     : byte_t    := (others => '0');
-    signal response_addr_r    : byte_t    := (others => '0');
-    signal response_data_r    : word_t    := (others => '0');
-    signal cmd_valid_r        : std_logic := '0';
-    signal cmd_addr_r         : byte_t    := (others => '0');
-    signal record_req_r       : std_logic := '0';
+    signal response_valid_r : std_logic := '0';
+    signal response_cmd_r   : byte_t    := (others => '0');
+    signal response_addr_r  : byte_t    := (others => '0');
+    signal response_data_r  : word_t    := (others => '0');
+    signal cmd_valid_r      : std_logic := '0';
+    signal cmd_addr_r       : byte_t    := (others => '0');
+    signal record_req_r     : std_logic := '0';
 
 begin
 
-    response_valid       <= response_valid_r;
-    response_cmd         <= response_cmd_r;
-    response_addr        <= response_addr_r;
-    response_data        <= response_data_r;
-    cmd_valid            <= cmd_valid_r;
-    cmd_addr             <= cmd_addr_r;
-    record_req           <= record_req_r;
-    active_record_length <= active_record_length_r;
-    active_channel_mask  <= active_channel_mask_r;
-    debug_led            <= debug_led_r(7 downto 0);
+    response_valid            <= response_valid_r;
+    response_cmd              <= response_cmd_r;
+    response_addr             <= response_addr_r;
+    response_data             <= response_data_r;
+    cmd_valid                 <= cmd_valid_r;
+    cmd_addr                  <= cmd_addr_r;
+    record_req                <= record_req_r;
+    active_record_length      <= active_record_length_r;
+    active_channel_mask       <= active_channel_mask_r;
+    active_pre_length         <= active_pre_length_r;
+    active_trigger_source     <= active_trigger_source_r;
+    active_trigger_edge       <= active_trigger_edge_r;
+    active_trigger_level      <= active_trigger_level_r;
+    active_trigger_hysteresis <= active_trigger_hysteresis_r;
+    debug_led                 <= debug_led_r(7 downto 0);
 
     p_req : process (clk)
         variable v_addr : integer;
@@ -132,17 +176,27 @@ begin
             end if;
 
             if rst = '1' then
-                debug_scratch0_r        <= (others => '0');
-                debug_scratch1_r        <= (others => '0');
-                debug_led_r             <= (others => '0');
-                pending_record_length   <= std_logic_vector(to_unsigned(RECORD_MAX_SAMPLES, 32));
-                pending_channel_mask    <= x"01";
-                active_record_length_r  <= std_logic_vector(to_unsigned(RECORD_MAX_SAMPLES, 32));
-                active_channel_mask_r   <= x"01";
-                counter_frames_ok       <= (others => '0');
-                counter_bad_magic       <= (others => '0');
-                counter_unknown_command <= (others => '0');
-                counter_bad_address     <= (others => '0');
+                debug_scratch0_r              <= (others => '0');
+                debug_scratch1_r              <= (others => '0');
+                debug_led_r                   <= (others => '0');
+                pending_record_length         <= DEFAULT_RECORD_LENGTH;
+                pending_channel_mask          <= DEFAULT_CHANNEL_MASK;
+                pending_pre_length            <= DEFAULT_PRE_LENGTH;
+                pending_trigger_source        <= DEFAULT_TRIG_SOURCE;
+                pending_trigger_edge          <= DEFAULT_TRIG_EDGE;
+                pending_trigger_level         <= DEFAULT_TRIG_LEVEL;
+                pending_trigger_hysteresis    <= DEFAULT_TRIG_HYST;
+                active_record_length_r        <= DEFAULT_RECORD_LENGTH;
+                active_channel_mask_r         <= DEFAULT_CHANNEL_MASK;
+                active_pre_length_r           <= DEFAULT_PRE_LENGTH;
+                active_trigger_source_r       <= DEFAULT_TRIG_SOURCE;
+                active_trigger_edge_r         <= DEFAULT_TRIG_EDGE;
+                active_trigger_level_r        <= DEFAULT_TRIG_LEVEL;
+                active_trigger_hysteresis_r   <= DEFAULT_TRIG_HYST;
+                counter_frames_ok             <= (others => '0');
+                counter_bad_magic             <= (others => '0');
+                counter_unknown_command       <= (others => '0');
+                counter_bad_address           <= (others => '0');
 
             elsif request_start = '1' then
                 v_addr := to_integer(unsigned(request_addr));
@@ -187,11 +241,58 @@ begin
                             v_data(7 downto 0) := v_mask;
                         end if;
 
+                    elsif request_addr = ADDR_ACQUISITION_PRETRIGGER then
+                        if unsigned(request_data) <= RECORD_MAX_SAMPLES - 1 then
+                            pending_pre_length <= request_data;
+                            v_data             := request_data;
+                        else
+                            v_err  := true;
+                            v_code := ERROR_BAD_VALUE;
+                        end if;
+
+                    elsif request_addr = ADDR_TRIGGER_SOURCE then
+                        if unsigned(request_data) <= 1 then
+                            pending_trigger_source <= request_data(7 downto 0);
+                            v_data                 := x"000000" & request_data(7 downto 0);
+                        else
+                            v_err  := true;
+                            v_code := ERROR_BAD_VALUE;
+                        end if;
+
+                    elsif request_addr = ADDR_TRIGGER_EDGE then
+                        if unsigned(request_data) <= 2 then
+                            pending_trigger_edge <= request_data(7 downto 0);
+                            v_data               := x"000000" & request_data(7 downto 0);
+                        else
+                            v_err  := true;
+                            v_code := ERROR_BAD_VALUE;
+                        end if;
+
+                    elsif request_addr = ADDR_TRIGGER_LEVEL then
+                        if unsigned(request_data) <= 255 then
+                            pending_trigger_level <= request_data(7 downto 0);
+                            v_data                := x"000000" & request_data(7 downto 0);
+                        else
+                            v_err  := true;
+                            v_code := ERROR_BAD_VALUE;
+                        end if;
+
+                    elsif request_addr = ADDR_TRIGGER_HYSTERESIS then
+                        if unsigned(request_data) <= 255 then
+                            pending_trigger_hysteresis <= request_data(7 downto 0);
+                            v_data                     := x"000000" & request_data(7 downto 0);
+                        else
+                            v_err  := true;
+                            v_code := ERROR_BAD_VALUE;
+                        end if;
+
                     -- rejestry tylko do odczytu
                     elsif request_addr = ADDR_DEVICE_ID or request_addr = ADDR_PROTOCOL_VERSION
                           or request_addr = ADDR_DEBUG_CONST
                           or request_addr = ADDR_ACQUISITION_STATE
                           or request_addr = ADDR_ACQUISITION_RECORD_ID
+                          or request_addr = ADDR_ACQUISITION_WRITE_POINTER
+                          or request_addr = ADDR_ACQUISITION_TRIGGER_POINTER
                           or request_addr = ADDR_COUNTER_FRAMES_OK
                           or request_addr = ADDR_COUNTER_BAD_MAGIC
                           or request_addr = ADDR_COUNTER_UNKNOWN_COMMAND
@@ -209,22 +310,39 @@ begin
                             v_code := ERROR_NOT_READY;
                         end if;
 
-                    -- COMMIT: tylko w IDLE, kopiuje oczekującą do aktywnej
+                    -- COMMIT: tylko w IDLE, z regułami krzyżowymi
                     elsif request_addr = ADDR_COMMAND_COMMIT then
-                        if acquisition_state = x"00" then
-                            active_record_length_r <= pending_record_length;
-                            active_channel_mask_r  <= pending_channel_mask;
-                            v_data                 := (others => '0');
-                        else
+                        if acquisition_state /= x"00" then
                             v_err  := true;
                             v_code := ERROR_BAD_VALUE;
+                        elsif unsigned(pending_pre_length) >= unsigned(pending_record_length) then
+                            v_err  := true;
+                            v_code := ERROR_BAD_VALUE;
+                        elsif (pending_trigger_source = x"00" and pending_channel_mask(0) = '0')
+                              or (pending_trigger_source = x"01" and pending_channel_mask(1) = '0') then
+                            v_err  := true;
+                            v_code := ERROR_BAD_VALUE;
+                        else
+                            active_record_length_r      <= pending_record_length;
+                            active_channel_mask_r       <= pending_channel_mask;
+                            active_pre_length_r         <= pending_pre_length;
+                            active_trigger_source_r     <= pending_trigger_source;
+                            active_trigger_edge_r       <= pending_trigger_edge;
+                            active_trigger_level_r      <= pending_trigger_level;
+                            active_trigger_hysteresis_r <= pending_trigger_hysteresis;
+                            v_data                      := (others => '0');
                         end if;
 
                     -- RESET_CONFIG: wartości domyślne do kopii oczekującej
                     elsif request_addr = ADDR_COMMAND_RESET_CONFIG then
-                        pending_record_length <= std_logic_vector(to_unsigned(RECORD_MAX_SAMPLES, 32));
-                        pending_channel_mask  <= x"01";
-                        v_data                := (others => '0');
+                        pending_record_length      <= DEFAULT_RECORD_LENGTH;
+                        pending_channel_mask       <= DEFAULT_CHANNEL_MASK;
+                        pending_pre_length         <= DEFAULT_PRE_LENGTH;
+                        pending_trigger_source     <= DEFAULT_TRIG_SOURCE;
+                        pending_trigger_edge       <= DEFAULT_TRIG_EDGE;
+                        pending_trigger_level      <= DEFAULT_TRIG_LEVEL;
+                        pending_trigger_hysteresis <= DEFAULT_TRIG_HYST;
+                        v_data                     := (others => '0');
 
                     -- czyszczenie liczników: obsługiwane tutaj, bez cmd_valid
                     elsif request_addr = ADDR_COMMAND_CLEAR_COUNTERS then
@@ -259,11 +377,34 @@ begin
                     elsif request_addr = ADDR_ACQUISITION_CHANNEL_MASK then
                         v_data := x"000000" & pending_channel_mask;
 
+                    elsif request_addr = ADDR_ACQUISITION_PRETRIGGER then
+                        v_data := pending_pre_length;
+
+                    elsif request_addr = ADDR_TRIGGER_SOURCE then
+                        v_data := x"000000" & pending_trigger_source;
+
+                    elsif request_addr = ADDR_TRIGGER_EDGE then
+                        v_data := x"000000" & pending_trigger_edge;
+
+                    elsif request_addr = ADDR_TRIGGER_LEVEL then
+                        v_data := x"000000" & pending_trigger_level;
+
+                    elsif request_addr = ADDR_TRIGGER_HYSTERESIS then
+                        v_data := x"000000" & pending_trigger_hysteresis;
+
                     elsif request_addr = ADDR_ACQUISITION_STATE then
                         v_data := x"000000" & acquisition_state;
 
                     elsif request_addr = ADDR_ACQUISITION_RECORD_ID then
                         v_data := acquisition_record_id;
+
+                    elsif request_addr = ADDR_ACQUISITION_WRITE_POINTER then
+                        v_data := (others => '0');
+                        v_data(12 downto 0) := std_logic_vector(acquisition_write_pointer);
+
+                    elsif request_addr = ADDR_ACQUISITION_TRIGGER_POINTER then
+                        v_data := (others => '0');
+                        v_data(12 downto 0) := std_logic_vector(acquisition_trigger_pointer);
 
                     elsif request_addr = ADDR_COUNTER_FRAMES_OK then
                         v_data := std_logic_vector(counter_frames_ok);

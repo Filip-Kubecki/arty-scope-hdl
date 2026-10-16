@@ -7,61 +7,85 @@ use work.regmap_pkg.all;
 -- ctrl_protocol.vhd
 -- Tor sterowania: bajty z TCP przechodzą przez parser ramek, obsługę
 -- rejestrów i nadajniki. Odpowiedź 8-bajtów idzie przez frame_tx.
--- Po READ_RECORD (gdy rekord z danymi jest gotowy) za odpowiedzią 
--- idzie blok danych pomiarowych z measurement_data_tx. 
--- resp_done do frame_rx pojawia się dopiero po zakończeniu bloku, jedno żądanie w toku.
+-- Po READ_RECORD (gdy rekord jest gotowy) za odpowiedzią idzie blok danych
+-- z measurement_data_tx. resp_done do frame_rx pojawia się dopiero po
+-- zakończeniu bloku, jedno żądanie w toku.
 --
 -- Przepływ: frame_rx -> reg_access -> frame_tx -> [measurement_data_tx] -> frame_rx.
 --
--- Parametry rekordu (tymczasowo, do zastąpienia konfiguracją):
---   REC_CHANNEL_MASK  jeden kanał (ch2 jest nieobsługiwany - zera)
+-- Konfiguracja aktywna z reg_access jest wyprowadzana na zewnątrz
+-- (do acquisition_ctrl) oraz używana tutaj do nadajnika rekordu.
+--
+-- Odczyt pamięci w bloku: measurement_data_tx liczy indeks próbki od zera,
+-- a adres w pamięci cyklicznej to (record_base + indeks) mod N.
 -- =============================================================================
 
 entity ctrl_protocol is
     port (
         -- System
-        clk        : in  std_logic;
-        rst        : in  std_logic;
-        link_up    : in  std_logic;                 -- '0' = klient rozłączony
+        clk                   : in  std_logic;
+        rst                   : in  std_logic;
+        link_up               : in  std_logic;   -- '0' = klient rozłączony
 
         -- Bajty z TCP - RX
-        rx_data    : in  byte_t;
-        rx_valid   : in  std_logic;
-        rx_ready   : out std_logic;
+        rx_data               : in  byte_t;
+        rx_valid              : in  std_logic;
+        rx_ready              : out std_logic;
 
         -- Bajty do TCP - TX
-        tx_data    : out byte_t;
-        tx_valid   : out std_logic;
-        tx_ready   : in  std_logic;
+        tx_data               : out byte_t;
+        tx_valid              : out std_logic;
+        tx_ready              : in  std_logic;
 
         -- Polecenia do logiki akwizycji
-        cmd_valid  : out std_logic;
-        cmd_addr   : out byte_t;
+        cmd_valid             : out std_logic;
+        cmd_addr              : out byte_t;
 
         -- Wyjście debug
-        debug_led  : out byte_t;
+        debug_led             : out byte_t;
 
         -- Stan akwizycji
         acquisition_state     : in  byte_t;
         acquisition_record_id : in  word_t;
+        acquisition_write_pointer   : in  unsigned(12 downto 0);
+        acquisition_trigger_pointer : in  unsigned(12 downto 0);
+
+        -- Konfiguracja aktywna (do acquisition_ctrl)
+        record_length         : out word_t;
+        pre_length            : out word_t;
+        trigger_source        : out byte_t;
+        trigger_edge          : out byte_t;
+        trigger_level         : out byte_t;
+        trigger_hysteresis    : out byte_t;
+
+        -- Pozycja początku rekordu w buforze cyklicznym (z acquisition_ctrl)
+        record_base           : in  unsigned(12 downto 0);
 
         -- Odczyt pamięci rekordu
-        record_length : out word_t;
-        rd_addr    : out unsigned(12 downto 0);
-        rd_data    : in  std_logic_vector(15 downto 0)
+        rd_addr               : out unsigned(12 downto 0);
+        rd_data               : in  std_logic_vector(15 downto 0)
     );
 end entity ctrl_protocol;
 
 architecture rtl of ctrl_protocol is
 
-    signal control_record_length    : word_t;
-    signal measurement_channel_mask : byte_t;
+    -- konfiguracja aktywna z reg_access
+    signal control_record_length      : word_t;
+    signal control_pre_length         : word_t;
+    signal control_trigger_source     : byte_t;
+    signal control_trigger_edge       : byte_t;
+    signal control_trigger_level      : byte_t;
+    signal control_trigger_hysteresis : byte_t;
+    signal measurement_channel_mask   : byte_t;
+
+    -- indeks próbki z measurement_data_tx (przed mapowaniem)
+    signal record_index   : unsigned(12 downto 0);
 
     -- frame_rx -> reg_access
-    signal request_valid : std_logic;
-    signal request_cmd   : byte_t;
-    signal request_addr  : byte_t;
-    signal request_data  : word_t;
+    signal request_valid  : std_logic;
+    signal request_cmd    : byte_t;
+    signal request_addr   : byte_t;
+    signal request_data   : word_t;
 
     -- reg_access -> frame_tx
     signal response_valid : std_logic;
@@ -94,7 +118,7 @@ architecture rtl of ctrl_protocol is
     -- do frame_rx
     signal resp_done_s    : std_logic;
 
-    -- liczniki z frame_rx (podłączenie do rejestrów statusu w kolejnym kroku)
+    -- liczniki z frame_rx
     signal frame_ok       : std_logic;
     signal bad_magic      : std_logic;
 
@@ -115,31 +139,38 @@ begin
             resp_done => resp_done_s,
             frame_ok  => frame_ok,
             bad_magic => bad_magic
-          );
+        );
 
     u_reg_access : entity work.reg_access
         port map (
-            clk                   => clk,
-            rst                   => rst,
-            request_start         => request_valid,
-            request_cmd           => request_cmd,
-            request_addr          => request_addr,
-            request_data          => request_data,
-            response_valid        => response_valid,
-            response_cmd          => response_cmd,
-            response_addr         => response_addr,
-            response_data         => response_data,
-            cmd_valid             => cmd_valid,
-            cmd_addr              => cmd_addr,
-            record_req            => record_req,
-            acquisition_state     => acquisition_state,
-            acquisition_record_id => acquisition_record_id,
-            debug_led             => debug_led,
-            frame_ok_pulse  => frame_ok,
-            bad_magic_pulse => bad_magic,
-            active_record_length => control_record_length,
-            active_channel_mask  => measurement_channel_mask
-          );
+            clk                       => clk,
+            rst                       => rst,
+            request_start             => request_valid,
+            request_cmd               => request_cmd,
+            request_addr              => request_addr,
+            request_data              => request_data,
+            response_valid            => response_valid,
+            response_cmd              => response_cmd,
+            response_addr             => response_addr,
+            response_data             => response_data,
+            cmd_valid                 => cmd_valid,
+            cmd_addr                  => cmd_addr,
+            record_req                => record_req,
+            active_record_length      => control_record_length,
+            active_channel_mask       => measurement_channel_mask,
+            active_pre_length         => control_pre_length,
+            active_trigger_source     => control_trigger_source,
+            active_trigger_edge       => control_trigger_edge,
+            active_trigger_level      => control_trigger_level,
+            active_trigger_hysteresis => control_trigger_hysteresis,
+            acquisition_state         => acquisition_state,
+            acquisition_record_id     => acquisition_record_id,
+            acquisition_write_pointer   => acquisition_write_pointer,
+            acquisition_trigger_pointer => acquisition_trigger_pointer,
+            frame_ok_pulse            => frame_ok,
+            bad_magic_pulse           => bad_magic,
+            debug_led                 => debug_led
+        );
 
     u_frame_tx : entity work.frame_tx
         port map (
@@ -155,7 +186,7 @@ begin
             tx_data   => frame_tx_data,
             tx_valid  => frame_tx_valid,
             tx_ready  => frame_tx_ready
-          );
+        );
 
     -- Start bloku zaraz po zakończeniu 8-bajtowej odpowiedzi
     rec_start <= '1' when (rec_pending = '1' and frame_done = '1') else '0';
@@ -168,7 +199,8 @@ begin
             record_id    => acquisition_record_id,
             samples      => control_record_length,
             channel_mask => measurement_channel_mask,
-            rd_addr      => rd_addr,
+            trigger_pos  => control_pre_length,
+            rd_addr      => record_index,
             rd_data      => rd_data,
             tx_data      => rec_tx_data,
             tx_valid     => rec_tx_valid,
@@ -176,11 +208,24 @@ begin
             busy         => rec_busy,
             done         => rec_done,
             link_up      => link_up
-          );
+        );
 
-    -- sekwencja: READ_RECORD ustawia pending, po odpowiedzi startuje blok,
+    -- Mapowanie indeksu na adres w buforze cyklicznym: (base + indeks) mod N
+    p_read_map : process (record_index, record_base, control_record_length)
+        variable v_sum : integer;
+        variable v_n   : integer;
+    begin
+        v_n   := to_integer(unsigned(control_record_length));
+        v_sum := to_integer(record_base) + to_integer(record_index);
+        if v_sum >= v_n then
+            v_sum := v_sum - v_n;
+        end if;
+        rd_addr <= to_unsigned(v_sum, 13);
+    end process p_read_map;
+
+    -- Sekwencja: READ_RECORD ustawia pending, po odpowiedzi startuje blok,
     -- po bloku active gaśnie
-    process (clk)
+    p_seq : process (clk)
     begin
         if rising_edge(clk) then
             if rst = '1' or link_up = '0' then
@@ -201,7 +246,7 @@ begin
                 end if;
             end if;
         end if;
-    end process;
+    end process p_seq;
 
     -- MUX nadawania: w trakcie bloku nadaje measurement_data_tx
     tx_data        <= rec_tx_data  when rec_active = '1' else frame_tx_data;
@@ -209,11 +254,17 @@ begin
     frame_tx_ready <= '0'          when rec_active = '1' else tx_ready;
     rec_tx_ready   <= tx_ready     when rec_active = '1' else '0';
 
-    -- resp_done do frame_rx: koniec bloku, a gdy bloku się kończy, koniec ramki
+    -- resp_done do frame_rx: koniec bloku, a gdy blok czeka, nie kończymy ramki
     resp_done_s <= rec_done    when rec_active = '1' else
                    '0'         when rec_pending = '1' else
                    frame_done;
 
-    record_length <= control_record_length;
+    -- konfiguracja na zewnątrz
+    record_length      <= control_record_length;
+    pre_length         <= control_pre_length;
+    trigger_source     <= control_trigger_source;
+    trigger_edge       <= control_trigger_edge;
+    trigger_level      <= control_trigger_level;
+    trigger_hysteresis <= control_trigger_hysteresis;
 
 end architecture rtl;

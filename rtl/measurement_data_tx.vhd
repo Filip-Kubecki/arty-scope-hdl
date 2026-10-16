@@ -41,6 +41,7 @@ entity measurement_data_tx is
         start        : in  std_logic;   -- impuls: rozpocznij nadawanie
         record_id    : in  word_t;
         samples      : in  word_t;
+        trigger_pos  : in  word_t;
         channel_mask : in  byte_t;
 
         -- Odczyt pamięci rekordu
@@ -76,7 +77,8 @@ architecture rtl of measurement_data_tx is
         record_id_value      : word_t;
         samples_value        : word_t;
         channel_mask_value   : byte_t;
-        payload_length_value : word_t
+        payload_length_value : word_t;
+        trigger_pos_value    : word_t
     ) return std_logic_vector is
         variable header : std_logic_vector(511 downto 0) := (others => '0');
     begin
@@ -90,7 +92,9 @@ architecture rtl of measurement_data_tx is
         header(407 downto 400) := std_logic_vector(to_unsigned(RECORD_SAMPLE_BITS, 8));
         -- bajty 14-15: zarezerwowane
         header(383 downto 352) := samples_value;
-        -- bajty 20-63: zarezerwowane
+        -- bajty 20-23: TRIGGER_POS
+        header(351 downto 320) := trigger_pos_value;
+        -- bajty 24-63: zarezerwowane
         return header;
     end function build_header;
 
@@ -139,7 +143,9 @@ begin
                                 payload_bytes := samples_count * channels_count;
                             end if;
 
-                            header_shift_reg <= build_header(record_id, samples, channel_mask, std_logic_vector(to_unsigned(payload_bytes, 32)));
+                            header_shift_reg <= build_header(record_id, samples, channel_mask,
+                                                             std_logic_vector(to_unsigned(payload_bytes, 32)),
+                                                             trigger_pos);
                             channel_mask_reg <= channel_mask;
 
                             if samples_count > 0 then
@@ -153,6 +159,7 @@ begin
                             channel_phase     <= '0';
                             state             <= S_HEADER;
                         end if;
+
 
                     -- Wysyła 64 bajty nagłówka, przesuwając rejestr o bajt na każdy takt tx_ready.
                     -- Przy masce 00 kończy od razu, bez próbek.

@@ -69,12 +69,19 @@ Lista generowana z `regmap.yaml` (status `implemented`). Opisy uzupełnia się r
 | `0x16` | `ADDR_COMMAND_RESET_CONFIG` | --- |
 | `0x17` | `ADDR_COMMAND_READ_RECORD` | Pobranie gotowego rekordu: odpowiedź i blok danych |
 | `0x31` | `ADDR_ACQUISITION_RECORD_LENGTH` | --- |
+| `0x32` | `ADDR_ACQUISITION_PRETRIGGER` | --- |
 | `0x34` | `ADDR_ACQUISITION_CHANNEL_MASK` | --- |
+| `0x40` | `ADDR_TRIGGER_SOURCE` | --- |
+| `0x41` | `ADDR_TRIGGER_EDGE` | --- |
+| `0x42` | `ADDR_TRIGGER_LEVEL` | --- |
+| `0x43` | `ADDR_TRIGGER_HYSTERESIS` | --- |
 | `0x90` | `ADDR_COUNTER_FRAMES_OK` | --- |
 | `0x91` | `ADDR_COUNTER_BAD_MAGIC` | --- |
 | `0x92` | `ADDR_COUNTER_UNKNOWN_COMMAND` | --- |
 | `0x93` | `ADDR_COUNTER_BAD_ADDRESS` | --- |
 | `0xA0` | `ADDR_ACQUISITION_STATE` | Stan akwizycji: 0 IDLE, 1 ARMED, 2 CAPTURE, 3 READY |
+| `0xA1` | `ADDR_ACQUISITION_WRITE_POINTER` | --- |
+| `0xA2` | `ADDR_ACQUISITION_TRIGGER_POINTER` | --- |
 | `0xA4` | `ADDR_ACQUISITION_RECORD_ID` | Numer ostatniego kompletnego rekordu |
 | `0xF0` | `ADDR_DEBUG_SCRATCH0` | Rejestr roboczy do testu toru |
 | `0xF1` | `ADDR_DEBUG_SCRATCH1` | Rejestr roboczy do testu toru |

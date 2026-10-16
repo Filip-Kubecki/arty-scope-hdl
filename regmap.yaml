@@ -90,14 +90,14 @@ registers:
 
   - {name: ACQUISITION_MODE,          address: 0x30, access: rw,                   status: planned,     desc: "Auto, normal lub single"}
   - {name: ACQUISITION_RECORD_LENGTH, address: 0x31, access: rw,                   status: implemented,     desc: "Długość rekordu w próbkach na kanał"}
-  - {name: ACQUISITION_PRETRIGGER,    address: 0x32, access: rw,                   status: planned,     desc: "Próbki przed wyzwoleniem, na kanał"}
+  - {name: ACQUISITION_PRETRIGGER,    address: 0x32, access: rw,                   status: implemented,     desc: "Próbki przed wyzwoleniem, na kanał"}
   - {name: ACQUISITION_DECIMATION,    address: 0x33, access: rw,                   status: planned,     desc: "Zmniejszenie częstotliwości próbkowania"}
   - {name: ACQUISITION_CHANNEL_MASK,  address: 0x34, access: rw,                   status: implemented,     desc: "Maska kanałów: bit 0 = kanał 1, bit 1 = kanał 2, 0 niepoprawne"}
 
-  - {name: TRIGGER_SOURCE,            address: 0x40, access: rw,                   status: planned,     desc: "Kanał źródłowy wyzwalania"}
-  - {name: TRIGGER_EDGE,              address: 0x41, access: rw,                   status: planned,     desc: "Zbocze: narastające, opadające lub oba"}
-  - {name: TRIGGER_LEVEL,             address: 0x42, access: rw,                   status: planned,     desc: "Poziom w jednostkach ADC"}
-  - {name: TRIGGER_HYSTERESIS,        address: 0x43, access: rw,                   status: planned,     desc: "Pasmo wokół poziomu wyzwalania"}
+  - {name: TRIGGER_SOURCE,            address: 0x40, access: rw,                   status: implemented,     desc: "Kanał źródłowy wyzwalania"}
+  - {name: TRIGGER_EDGE,              address: 0x41, access: rw,                   status: implemented,     desc: "Zbocze: narastające, opadające lub oba"}
+  - {name: TRIGGER_LEVEL,             address: 0x42, access: rw,                   status: implemented,     desc: "Poziom w jednostkach ADC"}
+  - {name: TRIGGER_HYSTERESIS,        address: 0x43, access: rw,                   status: implemented,     desc: "Pasmo wokół poziomu wyzwalania"}
   - {name: TRIGGER_HOLDOFF,           address: 0x44, access: rw,                   status: planned,     desc: "Martwy czas po wyzwoleniu, w próbkach"}
 
   - {name: CHANNEL1_GAIN,             address: 0x50, access: rw,                   status: planned,     desc: "Słowo wzmocnienia AD8370 i bit zakresu, kanał 1"}
@@ -118,8 +118,8 @@ registers:
   - {name: COUNTER_BAD_ADDRESS,       address: 0x93, access: ro,                   status: implemented,     desc: "Dostępy do nieistniejących adresów"}
 
   - {name: ACQUISITION_STATE,         address: 0xA0, access: ro,                   status: implemented, desc: "Stan akwizycji: 0 IDLE, 1 ARMED, 2 CAPTURE, 3 READY"}
-  - {name: ACQUISITION_WRITE_POINTER, address: 0xA1, access: ro,                   status: planned,     desc: "Bieżący wskaźnik zapisu"}
-  - {name: ACQUISITION_TRIGGER_POINTER, address: 0xA2, access: ro,                 status: planned,     desc: "Indeks próbki, w której nastąpiło wyzwolenie"}
+  - {name: ACQUISITION_WRITE_POINTER, address: 0xA1, access: ro,                   status: implemented,     desc: "Bieżący wskaźnik zapisu"}
+  - {name: ACQUISITION_TRIGGER_POINTER, address: 0xA2, access: ro,                 status: implemented,     desc: "Indeks próbki, w której nastąpiło wyzwolenie"}
   - {name: ACQUISITION_SAMPLES,       address: 0xA3, access: ro,                   status: planned,     desc: "Zebrane próbki na kanał"}
   - {name: ACQUISITION_RECORD_ID,     address: 0xA4, access: ro,                   status: implemented, desc: "Numer ostatniego kompletnego rekordu"}
 
