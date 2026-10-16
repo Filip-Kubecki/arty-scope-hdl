@@ -61,11 +61,15 @@ Lista generowana z `regmap.yaml` (status `implemented`). Opisy uzupełnia się r
 |-------|-------|------|
 | `0x00` | `ADDR_DEVICE_ID` | Identyfikator urządzenia |
 | `0x01` | `ADDR_PROTOCOL_VERSION` | Wersja protokołu, `0x00000001` |
+| `0x10` | `ADDR_COMMAND_COMMIT` | --- |
 | `0x11` | `ADDR_COMMAND_ARM` | Uzbrojenie akwizycji (IDLE lub READY → ARMED) |
 | `0x12` | `ADDR_COMMAND_STOP` | Zatrzymanie akwizycji, powrót do IDLE |
 | `0x13` | `ADDR_COMMAND_FORCE_TRIGGER` | Ręczne wyzwolenie z ARMED, start zapisu rekordu |
 | `0x15` | `ADDR_COMMAND_CLEAR_COUNTERS` | --- |
+| `0x16` | `ADDR_COMMAND_RESET_CONFIG` | --- |
 | `0x17` | `ADDR_COMMAND_READ_RECORD` | Pobranie gotowego rekordu: odpowiedź i blok danych |
+| `0x31` | `ADDR_ACQUISITION_RECORD_LENGTH` | --- |
+| `0x34` | `ADDR_ACQUISITION_CHANNEL_MASK` | --- |
 | `0x90` | `ADDR_COUNTER_FRAMES_OK` | --- |
 | `0x91` | `ADDR_COUNTER_BAD_MAGIC` | --- |
 | `0x92` | `ADDR_COUNTER_UNKNOWN_COMMAND` | --- |

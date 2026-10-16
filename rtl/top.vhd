@@ -105,6 +105,7 @@ architecture rtl of top is
     signal control_command_valid : std_logic;
     signal control_command_addr  : byte_t;
     signal debug_led_bits        : byte_t;
+    signal control_record_length : word_t;
 
     -- Test ciągłego przesyłu
     signal stream_test_data  : std_logic_vector(7 downto 0) := (others => '0');
@@ -169,7 +170,8 @@ begin
             acquisition_state     => acquisition_state,
             acquisition_record_id => acquisition_record_id,
             rd_addr               => control_read_address,
-            rd_data               => memory_read_data
+            rd_data               => memory_read_data,
+            record_length         => control_record_length
         );
 
     u_adc : entity work.adc_mcp3201
@@ -199,7 +201,8 @@ begin
             mem_addr     => acquisition_mem_address,
             mem_data     => acquisition_mem_data,
             state        => acquisition_state,
-            record_id    => acquisition_record_id
+            record_id    => acquisition_record_id,
+            record_length => control_record_length
         );
 
     u_mem : entity work.sample_mem

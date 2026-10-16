@@ -33,6 +33,7 @@ protocol_constants:
   - {name: RECORD_TYPE_DATA,     type: byte,    value: 0xD0, desc: "Typ bloku danych"}
   - {name: RECORD_HEADER_LENGTH, type: natural, value: 64,   desc: "Długość nagłówka w bajtach"}
   - {name: RECORD_SAMPLE_BITS,   type: natural, value: 8,    desc: "Bity na próbkę (obecnie)"}
+  - {name: RECORD_MAX_SAMPLES,   type: natural, value: 8192, desc: "Maksymalna liczba próbek na kanał w rekordzie"}
 
   # Strefy adresów (dekoder sprawdza górne bity)
   - {name: ZONE_ID_LO,           type: byte,    value: 0x00, desc: "Tożsamość, początek"}
@@ -71,13 +72,13 @@ registers:
   # -------------------------------------------------------------------------
   # Komendy (WO, zapis uruchamia akcję)
   # -------------------------------------------------------------------------
-  - {name: COMMAND_COMMIT,            address: 0x10, access: wo,                   status: accepted,    desc: "Zatwierdzenie konfiguracji oczekującej (dziś bez efektu)"}
+  - {name: COMMAND_COMMIT,            address: 0x10, access: wo,                   status: implemented,    desc: "Zatwierdzenie konfiguracji oczekującej (dziś bez efektu)"}
   - {name: COMMAND_ARM,               address: 0x11, access: wo,                   status: implemented, desc: "Uzbrojenie akwizycji"}
   - {name: COMMAND_STOP,              address: 0x12, access: wo,                   status: implemented, desc: "Zatrzymanie akwizycji, powrót do IDLE"}
   - {name: COMMAND_FORCE_TRIGGER,     address: 0x13, access: wo,                   status: implemented, desc: "Ręczne wyzwolenie z ARMED"}
   - {name: COMMAND_CLEAR_FLAGS,        address: 0x14, access: wo,                   status: accepted,    desc: "Kasowanie flag, dane = maska (dziś bez efektu)"}
   - {name: COMMAND_CLEAR_COUNTERS,     address: 0x15, access: wo,                   status: implemented,    desc: "Zerowanie liczników"}
-  - {name: COMMAND_RESET_CONFIG,      address: 0x16, access: wo,                   status: accepted,    desc: "Wartości domyślne w rejestrach oczekujących (dziś bez efektu)"}
+  - {name: COMMAND_RESET_CONFIG,      address: 0x16, access: wo,                   status: implemented,    desc: "Wartości domyślne w rejestrach oczekujących (dziś bez efektu)"}
   - {name: COMMAND_READ_RECORD,       address: 0x17, access: wo,                   status: implemented, desc: "Wysłanie ostatniego kompletnego rekordu"}
 
   # -------------------------------------------------------------------------
@@ -88,10 +89,10 @@ registers:
   - {name: ADC_DELAY,                 address: 0x22, access: rw,                   status: planned,     desc: "Opóźnienie wejścia ADC"}
 
   - {name: ACQUISITION_MODE,          address: 0x30, access: rw,                   status: planned,     desc: "Auto, normal lub single"}
-  - {name: ACQUISITION_RECORD_LENGTH, address: 0x31, access: rw,                   status: planned,     desc: "Długość rekordu w próbkach na kanał"}
+  - {name: ACQUISITION_RECORD_LENGTH, address: 0x31, access: rw,                   status: implemented,     desc: "Długość rekordu w próbkach na kanał"}
   - {name: ACQUISITION_PRETRIGGER,    address: 0x32, access: rw,                   status: planned,     desc: "Próbki przed wyzwoleniem, na kanał"}
   - {name: ACQUISITION_DECIMATION,    address: 0x33, access: rw,                   status: planned,     desc: "Zmniejszenie częstotliwości próbkowania"}
-  - {name: ACQUISITION_CHANNEL_MASK,  address: 0x34, access: rw,                   status: planned,     desc: "Maska kanałów: bit 0 = kanał 1, bit 1 = kanał 2, 0 niepoprawne"}
+  - {name: ACQUISITION_CHANNEL_MASK,  address: 0x34, access: rw,                   status: implemented,     desc: "Maska kanałów: bit 0 = kanał 1, bit 1 = kanał 2, 0 niepoprawne"}
 
   - {name: TRIGGER_SOURCE,            address: 0x40, access: rw,                   status: planned,     desc: "Kanał źródłowy wyzwalania"}
   - {name: TRIGGER_EDGE,              address: 0x41, access: rw,                   status: planned,     desc: "Zbocze: narastające, opadające lub oba"}

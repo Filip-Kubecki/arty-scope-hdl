@@ -19,6 +19,7 @@ package regmap_pkg is
     constant RECORD_TYPE_DATA : byte_t := x"D0";  -- Typ bloku danych
     constant RECORD_HEADER_LENGTH : natural := 64;  -- Długość nagłówka w bajtach
     constant RECORD_SAMPLE_BITS : natural := 8;  -- Bity na próbkę (obecnie)
+    constant RECORD_MAX_SAMPLES : natural := 8192;  -- Maksymalna liczba próbek na kanał w rekordzie
     constant ZONE_ID_LO : byte_t := x"00";  -- Tożsamość, początek
     constant ZONE_ID_HI : byte_t := x"0F";  -- Tożsamość, koniec
     constant ZONE_COMMAND_LO : byte_t := x"10";  -- Komendy, początek
@@ -48,22 +49,22 @@ package regmap_pkg is
     constant ADDR_GATEWARE_VERSION : byte_t := x"02";  -- planned: Wersja projektu FPGA
     constant ADDR_BUILD_TIMESTAMP : byte_t := x"03";  -- planned: Data builda albo skrót commita
     constant ADDR_CAPABILITIES : byte_t := x"04";  -- planned: Liczba kanałów, maks. długość rekordu, częstotliwości
-    constant ADDR_COMMAND_COMMIT : byte_t := x"10";  -- accepted: Zatwierdzenie konfiguracji oczekującej (dziś bez efektu)
+    constant ADDR_COMMAND_COMMIT : byte_t := x"10";  -- implemented: Zatwierdzenie konfiguracji oczekującej (dziś bez efektu)
     constant ADDR_COMMAND_ARM : byte_t := x"11";  -- implemented: Uzbrojenie akwizycji
     constant ADDR_COMMAND_STOP : byte_t := x"12";  -- implemented: Zatrzymanie akwizycji, powrót do IDLE
     constant ADDR_COMMAND_FORCE_TRIGGER : byte_t := x"13";  -- implemented: Ręczne wyzwolenie z ARMED
     constant ADDR_COMMAND_CLEAR_FLAGS : byte_t := x"14";  -- accepted: Kasowanie flag, dane = maska (dziś bez efektu)
     constant ADDR_COMMAND_CLEAR_COUNTERS : byte_t := x"15";  -- implemented: Zerowanie liczników
-    constant ADDR_COMMAND_RESET_CONFIG : byte_t := x"16";  -- accepted: Wartości domyślne w rejestrach oczekujących (dziś bez efektu)
+    constant ADDR_COMMAND_RESET_CONFIG : byte_t := x"16";  -- implemented: Wartości domyślne w rejestrach oczekujących (dziś bez efektu)
     constant ADDR_COMMAND_READ_RECORD : byte_t := x"17";  -- implemented: Wysłanie ostatniego kompletnego rekordu
     constant ADDR_SYSTEM_CONTROL : byte_t := x"20";  -- planned: Bity ogólne
     constant ADDR_ADC_TEST_PATTERN : byte_t := x"21";  -- planned: Wzorzec testowy zamiast próbek z ADC
     constant ADDR_ADC_DELAY : byte_t := x"22";  -- planned: Opóźnienie wejścia ADC
     constant ADDR_ACQUISITION_MODE : byte_t := x"30";  -- planned: Auto, normal lub single
-    constant ADDR_ACQUISITION_RECORD_LENGTH : byte_t := x"31";  -- planned: Długość rekordu w próbkach na kanał
+    constant ADDR_ACQUISITION_RECORD_LENGTH : byte_t := x"31";  -- implemented: Długość rekordu w próbkach na kanał
     constant ADDR_ACQUISITION_PRETRIGGER : byte_t := x"32";  -- planned: Próbki przed wyzwoleniem, na kanał
     constant ADDR_ACQUISITION_DECIMATION : byte_t := x"33";  -- planned: Zmniejszenie częstotliwości próbkowania
-    constant ADDR_ACQUISITION_CHANNEL_MASK : byte_t := x"34";  -- planned: Maska kanałów: bit 0 = kanał 1, bit 1 = kanał 2, 0 niepoprawne
+    constant ADDR_ACQUISITION_CHANNEL_MASK : byte_t := x"34";  -- implemented: Maska kanałów: bit 0 = kanał 1, bit 1 = kanał 2, 0 niepoprawne
     constant ADDR_TRIGGER_SOURCE : byte_t := x"40";  -- planned: Kanał źródłowy wyzwalania
     constant ADDR_TRIGGER_EDGE : byte_t := x"41";  -- planned: Zbocze: narastające, opadające lub oba
     constant ADDR_TRIGGER_LEVEL : byte_t := x"42";  -- planned: Poziom w jednostkach ADC

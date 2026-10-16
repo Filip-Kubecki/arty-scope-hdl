@@ -19,36 +19,40 @@ use work.regmap_pkg.all;
 --   STOP           z dowolnego stanu do IDLE
 --   ostatnia próbka w CAPTURE: do READY, RECORD_ID zwiększony
 --
+-- Długość rekordu (record_length, w próbkach na kanał) pochodzi z aktywnej
+-- konfiguracji. Zmienia się tylko przez COMMIT w IDLE, więc w czasie
+-- akwizycji jest stała.
+--
 -- Zapis do pamięci tylko w CAPTURE i tylko przy sample_valid.
 -- Słowo pamięci = ch2 & ch1.
 -- =============================================================================
 
 entity acquisition_ctrl is
-    generic (
-        G_DEPTH : natural := 8192            -- liczba próbek w rekordzie
-    );
     port (
-        clk          : in  std_logic;
-        rst          : in  std_logic;
+        clk           : in  std_logic;
+        rst           : in  std_logic;
 
         -- komendy z ctrl_protocol
-        cmd_valid    : in  std_logic;
-        cmd_addr     : in  byte_t;
+        cmd_valid     : in  std_logic;
+        cmd_addr      : in  byte_t;
 
         -- próbki z przetwornika
-        sample_valid : in  std_logic;
-        ch1          : in  byte_t;
-        ch2          : in  byte_t;
+        sample_valid  : in  std_logic;
+        ch1           : in  byte_t;
+        ch2           : in  byte_t;
+
+        -- konfiguracja aktywna
+        record_length : in  word_t;
 
         -- sterowanie przetwornikiem i pamięcią
-        enable       : out std_logic;
-        mem_we       : out std_logic;
-        mem_addr     : out unsigned(12 downto 0);
-        mem_data     : out std_logic_vector(15 downto 0);
+        enable        : out std_logic;
+        mem_we        : out std_logic;
+        mem_addr      : out unsigned(12 downto 0);
+        mem_data      : out std_logic_vector(15 downto 0);
 
         -- status dla rejestrów
-        state        : out byte_t;
-        record_id    : out word_t
+        state         : out byte_t;
+        record_id     : out word_t
     );
 end entity acquisition_ctrl;
 
@@ -58,8 +62,6 @@ architecture rtl of acquisition_ctrl is
     constant ST_ARMED   : byte_t := x"01";
     constant ST_CAPTURE : byte_t := x"02";
     constant ST_READY   : byte_t := x"03";
-
-    constant LAST_ADDR  : unsigned(12 downto 0) := to_unsigned(G_DEPTH - 1, 13);
 
     signal st        : byte_t := ST_IDLE;
     signal wr_addr_r : unsigned(12 downto 0) := (others => '0');
@@ -102,10 +104,10 @@ begin
                     end if;
                 end if;
 
-                -- zapis próbek; ostatnia próbka kończy rekord
+                -- zapis próbek; ostatnia próbka rekordu kończy akwizycję
                 if st = ST_CAPTURE and sample_valid = '1' then
                     wr_addr_r <= wr_addr_r + 1;
-                    if wr_addr_r = LAST_ADDR then
+                    if resize(wr_addr_r, 32) = unsigned(record_length) - 1 then
                         st       <= ST_READY;
                         rec_id_r <= rec_id_r + 1;
                     end if;

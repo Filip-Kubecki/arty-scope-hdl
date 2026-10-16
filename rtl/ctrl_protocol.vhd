@@ -14,14 +14,10 @@ use work.regmap_pkg.all;
 -- Przepływ: frame_rx -> reg_access -> frame_tx -> [measurement_data_tx] -> frame_rx.
 --
 -- Parametry rekordu (tymczasowo, do zastąpienia konfiguracją):
---   G_RECORD_SAMPLES  liczba próbek na kanał
 --   REC_CHANNEL_MASK  jeden kanał (ch2 jest nieobsługiwany - zera)
 -- =============================================================================
 
 entity ctrl_protocol is
-    generic (
-        G_RECORD_SAMPLES : natural := 8192
-    );
     port (
         -- System
         clk        : in  std_logic;
@@ -50,6 +46,7 @@ entity ctrl_protocol is
         acquisition_record_id : in  word_t;
 
         -- Odczyt pamięci rekordu
+        record_length : out word_t;
         rd_addr    : out unsigned(12 downto 0);
         rd_data    : in  std_logic_vector(15 downto 0)
     );
@@ -57,8 +54,8 @@ end entity ctrl_protocol;
 
 architecture rtl of ctrl_protocol is
 
-    constant REC_CHANNEL_MASK : byte_t := x"01";
-    constant REC_SAMPLES      : word_t := std_logic_vector(to_unsigned(G_RECORD_SAMPLES, 32));
+    signal control_record_length    : word_t;
+    signal measurement_channel_mask : byte_t;
 
     -- frame_rx -> reg_access
     signal request_valid : std_logic;
@@ -139,7 +136,9 @@ begin
             acquisition_record_id => acquisition_record_id,
             debug_led             => debug_led,
             frame_ok_pulse  => frame_ok,
-            bad_magic_pulse => bad_magic
+            bad_magic_pulse => bad_magic,
+            active_record_length => control_record_length,
+            active_channel_mask  => measurement_channel_mask
           );
 
     u_frame_tx : entity work.frame_tx
@@ -167,8 +166,8 @@ begin
             rst          => rst,
             start        => rec_start,
             record_id    => acquisition_record_id,
-            samples      => REC_SAMPLES,
-            channel_mask => REC_CHANNEL_MASK,
+            samples      => control_record_length,
+            channel_mask => measurement_channel_mask,
             rd_addr      => rd_addr,
             rd_data      => rd_data,
             tx_data      => rec_tx_data,
@@ -214,5 +213,7 @@ begin
     resp_done_s <= rec_done    when rec_active = '1' else
                    '0'         when rec_pending = '1' else
                    frame_done;
+
+    record_length <= control_record_length;
 
 end architecture rtl;
