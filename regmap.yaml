@@ -72,7 +72,7 @@ registers:
   # -------------------------------------------------------------------------
   # Komendy (WO, zapis uruchamia akcję)
   # -------------------------------------------------------------------------
-  - {name: COMMAND_COMMIT,            address: 0x10, access: wo,                   status: implemented,    desc: "Zatwierdzenie konfiguracji oczekującej (dziś bez efektu)"}
+  - {name: COMMAND_COMMIT,            address: 0x10, access: wo,                   status: implemented,    desc: "Zatwierdzenie konfiguracji oczekującej"}
   - {name: COMMAND_ARM,               address: 0x11, access: wo,                   status: implemented, desc: "Uzbrojenie akwizycji"}
   - {name: COMMAND_STOP,              address: 0x12, access: wo,                   status: implemented, desc: "Zatrzymanie akwizycji, powrót do IDLE"}
   - {name: COMMAND_FORCE_TRIGGER,     address: 0x13, access: wo,                   status: implemented, desc: "Ręczne wyzwolenie z ARMED"}

@@ -186,9 +186,13 @@ begin
 
                     if v_sample < v_level - v_hyst then
                         low_armed_r <= '1';
+                    elsif v_sample >= v_level then
+                        low_armed_r <= '0';
                     end if;
                     if v_sample > v_level + v_hyst then
                         high_armed_r <= '1';
+                    elsif v_sample <= v_level then
+                        high_armed_r <= '0';
                     end if;
 
                     -- decyzja o wyzwoleniu (po zebraniu pre próbek)

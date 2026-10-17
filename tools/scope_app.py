@@ -14,6 +14,8 @@ Funkcje:
   - odczyt rekordu z wykresem i zaznaczeniem pozycji wyzwolenia
   - kontrola zgodności pozycji wyzwolenia z przejściem przez poziom
     (tylko dla rekordów z cyklu z poziomem)
+  - kontrola wskaźników: (trigger - write) mod N == pre
+    (tylko dla cyklu z poziomem)
   - zapis rekordu do .bin albo .csv
 
 Wymagania: python3, tkinter, matplotlib.
@@ -55,6 +57,8 @@ ADDR_ARM = 0x11
 ADDR_STOP = 0x12
 ADDR_FORCE = 0x13
 ADDR_READ_RECORD = 0x17
+ADDR_WRITE_POINTER = 0xA1
+ADDR_TRIGGER_POINTER = 0xA2
 
 # Konfiguracja
 ADDR_COMMIT = 0x10
@@ -517,7 +521,17 @@ class App(tk.Tk):
 
     def t_cycle_trigger(self):
         self.t_command(ADDR_ARM, "ARM")
-        return self._wait_ready_and_read(timeout=10.0)
+        info, payload = self._wait_ready_and_read(timeout=10.0)
+        ptrs, ptr_err = self.t_read_pointers()
+        return info, payload, ptrs, ptr_err
+
+    def t_read_pointers(self):
+        try:
+            write_ptr = self.t_read_reg(ADDR_WRITE_POINTER, "WRITE_POINTER")
+            trigger_ptr = self.t_read_reg(ADDR_TRIGGER_POINTER, "TRIGGER_POINTER")
+        except ProtocolError as exc:
+            return None, str(exc)
+        return {"write": write_ptr, "trigger": trigger_ptr}, None
 
     def _wait_ready_and_read(self, timeout):
         deadline = time.time() + timeout
@@ -646,7 +660,11 @@ class App(tk.Tk):
         try:
             while True:
                 name, ok, value = self.results.get_nowait()
-                self.handle_result(name, ok, value)
+                try:
+                    self.handle_result(name, ok, value)
+                except Exception as exc:
+                    # błąd obsługi jednego wyniku nie może zatrzymać pętli GUI
+                    self.log(f"[{name}] wyjątek w GUI: {exc}")
         except queue.Empty:
             pass
         self.after(100, self.poll_results)
@@ -688,9 +706,14 @@ class App(tk.Tk):
             }
             self.log(labels[name])
             self.on_status()
+        elif name == "cycle_level":
+            info, payload, ptrs, ptr_err = value
+            self.show_record(info, payload, check=True)
+            self.check_pointers(info, ptrs, ptr_err)
+            self.on_status()
         elif name in RECORD_TASKS:
             info, payload = value
-            self.show_record(info, payload, check=(name == "cycle_level"))
+            self.show_record(info, payload, check=False)
             self.on_status()
 
     def show_record(self, info, payload, check=False):
@@ -796,6 +819,32 @@ class App(tk.Tk):
             f"kontrola wyzwolenia: TRIGGER_POS={pre}, najbliższe przejście w próbce {nearest} "
             f"(różnica {nearest - pre}), próbki wokół pozycji: "
             f"{payload[pre - 1]} {payload[pre]} {payload[pre + 1]}, poziom {level}"
+        )
+
+    def check_pointers(self, info, ptrs, ptr_err):
+        """Sprawdza (trigger - write) mod N == pre dla rekordu z cyklu z poziomem."""
+        cfg = self.applied_cfg
+        if cfg is None:
+            self.log("wskazniki: brak zatwierdzonej konfiguracji w tej sesji")
+            return
+        if ptrs is None:
+            self.log(f"wskazniki: nie odczytano ({ptr_err})")
+            return
+        n = cfg["record_length"]
+        pre = cfg["pre"]
+        write_ptr = ptrs["write"]
+        trigger_ptr = ptrs["trigger"]
+        if write_ptr >= n or trigger_ptr >= n:
+            self.log(
+                f"wskazniki: poza buforem N={n}: write {write_ptr}, trigger {trigger_ptr}"
+            )
+            return
+        diff = (trigger_ptr - write_ptr) % n
+        ok = diff == pre
+        self.log(
+            f"wskazniki: {'OK' if ok else 'NIEZGODNE'}: write {write_ptr}, "
+            f"trigger {trigger_ptr}, (trigger - write) mod {n} = {diff}, "
+            f"oczekiwane pre {pre}, TRIGGER_POS z nagłówka {info['trigger_pos']}"
         )
 
     def on_close(self):
