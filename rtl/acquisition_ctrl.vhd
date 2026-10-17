@@ -19,6 +19,8 @@ use work.regmap_pkg.all;
 -- próbka wyzwalająca ma indeks pre_length, potem post = N - pre_length próbek.
 -- record_base wskazuje adres pamięci próbki o indeksie 0 rekordu.
 --
+-- Szerokość adresów: 16 bitów (bufor do 65536 próbek na kanał).
+--
 -- trigger_pointer: adres próbki wyzwalającej, zapamiętany w chwili wyzwolenia,
 -- zerowany przy ARM. Używany do diagnostyki (ADDR_ACQUISITION_TRIGGER_POINTER).
 --
@@ -30,6 +32,8 @@ use work.regmap_pkg.all;
 --     Krawędź opadająca (0x01): uzbrojenie, gdy próbka > level + hysteresis,
 --       wyzwolenie, gdy próbka <= level.
 --     Obie (0x02): oba warunki.
+--   Uzbrojenie jest czyszczone przez próbkę po drugiej stronie poziomu,
+--   także przed zakończeniem pre.
 --   Wyzwolenie możliwe dopiero po zebraniu pre_length próbek od ARM.
 --
 -- Konfiguracja (record_length, pre_length, trigger_*) zmienia się tylko przez
@@ -62,12 +66,12 @@ entity acquisition_ctrl is
         -- sterowanie przetwornikiem i pamięcią
         enable             : out std_logic;
         mem_we             : out std_logic;
-        mem_addr           : out unsigned(12 downto 0);
+        mem_addr           : out unsigned(15 downto 0);
         mem_data           : out std_logic_vector(15 downto 0);
 
         -- status dla rejestrów i odczytu
-        record_base        : out unsigned(12 downto 0);
-        trigger_pointer    : out unsigned(12 downto 0);
+        record_base        : out unsigned(15 downto 0);
+        trigger_pointer    : out unsigned(15 downto 0);
         state              : out byte_t;
         record_id          : out word_t
     );
@@ -87,12 +91,12 @@ architecture rtl of acquisition_ctrl is
     constant SOURCE_CH1 : byte_t := x"00";
 
     signal st           : byte_t := ST_IDLE;
-    signal wr_addr_r    : unsigned(12 downto 0) := (others => '0');
+    signal wr_addr_r    : unsigned(15 downto 0) := (others => '0');
     signal rec_id_r     : unsigned(31 downto 0) := (others => '0');
     signal filled_r     : unsigned(31 downto 0) := (others => '0');  -- próbki od ARM, do N
     signal post_cnt_r   : unsigned(31 downto 0) := (others => '0');  -- próbki po wyzwoleniu
-    signal base_r       : unsigned(12 downto 0) := (others => '0');
-    signal trig_addr_r  : unsigned(12 downto 0) := (others => '0');  -- adres próbki wyzwalającej
+    signal base_r       : unsigned(15 downto 0) := (others => '0');
+    signal trig_addr_r  : unsigned(15 downto 0) := (others => '0');  -- adres próbki wyzwalającej
     signal low_armed_r  : std_logic := '0';   -- uzbrojenie krawędzi narastającej
     signal high_armed_r : std_logic := '0';   -- uzbrojenie krawędzi opadającej
     signal force_r      : std_logic := '0';   -- FORCE_TRIGGER oczekuje na pre
@@ -217,7 +221,7 @@ begin
                         if v_base < 0 then
                             v_base := v_base + v_n;
                         end if;
-                        base_r <= to_unsigned(v_base, 13);
+                        base_r <= to_unsigned(v_base, 16);
 
                         if v_post <= 1 then
                             st       <= ST_READY;

@@ -45,7 +45,7 @@ entity measurement_data_tx is
         channel_mask : in  byte_t;
 
         -- Odczyt pamięci rekordu
-        rd_addr      : out unsigned(12 downto 0);
+        rd_addr      : out unsigned(15 downto 0);
         rd_data      : in  std_logic_vector(15 downto 0);
 
         -- Strumień do tx
@@ -65,8 +65,8 @@ architecture rtl of measurement_data_tx is
     signal state               : state_t := S_IDLE;
     signal header_shift_reg    : std_logic_vector(511 downto 0) := (others => '0');
     signal header_byte_count   : unsigned(5 downto 0) := (others => '0');
-    signal sample_index        : unsigned(12 downto 0) := (others => '0');
-    signal last_sample_index   : unsigned(12 downto 0) := (others => '0');
+    signal sample_index        : unsigned(15 downto 0) := (others => '0');
+    signal last_sample_index   : unsigned(15 downto 0) := (others => '0');
     signal channel_mask_reg    : byte_t := (others => '0');
     signal channel_phase       : std_logic := '0';   -- 0: pierwszy bajt słowa, 1: drugi
     signal sample_word_reg     : std_logic_vector(15 downto 0) := (others => '0');
@@ -149,7 +149,7 @@ begin
                             channel_mask_reg <= channel_mask;
 
                             if samples_count > 0 then
-                                last_sample_index <= to_unsigned(samples_count - 1, 13);
+                                last_sample_index <= to_unsigned(samples_count - 1, 16);
                             else
                                 last_sample_index <= (others => '0');
                             end if;

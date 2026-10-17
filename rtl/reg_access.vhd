@@ -77,8 +77,8 @@ entity reg_access is
         -- stan akwizycji
         acquisition_state           : in  byte_t;
         acquisition_record_id       : in  word_t;
-        acquisition_write_pointer   : in  unsigned(12 downto 0);
-        acquisition_trigger_pointer : in  unsigned(12 downto 0);
+        acquisition_write_pointer   : in  unsigned(15 downto 0);
+        acquisition_trigger_pointer : in  unsigned(15 downto 0);
 
         -- zdarzenia z parsera ramek (impulsy 1 takt)
         frame_ok_pulse  : in  std_logic;
@@ -400,11 +400,11 @@ begin
 
                     elsif request_addr = ADDR_ACQUISITION_WRITE_POINTER then
                         v_data := (others => '0');
-                        v_data(12 downto 0) := std_logic_vector(acquisition_write_pointer);
+                        v_data(15 downto 0) := std_logic_vector(acquisition_write_pointer);
 
                     elsif request_addr = ADDR_ACQUISITION_TRIGGER_POINTER then
                         v_data := (others => '0');
-                        v_data(12 downto 0) := std_logic_vector(acquisition_trigger_pointer);
+                        v_data(15 downto 0) := std_logic_vector(acquisition_trigger_pointer);
 
                     elsif request_addr = ADDR_COUNTER_FRAMES_OK then
                         v_data := std_logic_vector(counter_frames_ok);

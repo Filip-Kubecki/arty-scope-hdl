@@ -47,8 +47,8 @@ entity ctrl_protocol is
         -- Stan akwizycji
         acquisition_state     : in  byte_t;
         acquisition_record_id : in  word_t;
-        acquisition_write_pointer   : in  unsigned(12 downto 0);
-        acquisition_trigger_pointer : in  unsigned(12 downto 0);
+        acquisition_write_pointer   : in  unsigned(15 downto 0);
+        acquisition_trigger_pointer : in  unsigned(15 downto 0);
 
         -- Konfiguracja aktywna (do acquisition_ctrl)
         record_length         : out word_t;
@@ -59,10 +59,10 @@ entity ctrl_protocol is
         trigger_hysteresis    : out byte_t;
 
         -- Pozycja początku rekordu w buforze cyklicznym (z acquisition_ctrl)
-        record_base           : in  unsigned(12 downto 0);
+        record_base           : in  unsigned(15 downto 0);
 
         -- Odczyt pamięci rekordu
-        rd_addr               : out unsigned(12 downto 0);
+        rd_addr               : out unsigned(15 downto 0);
         rd_data               : in  std_logic_vector(15 downto 0)
     );
 end entity ctrl_protocol;
@@ -79,7 +79,7 @@ architecture rtl of ctrl_protocol is
     signal measurement_channel_mask   : byte_t;
 
     -- indeks próbki z measurement_data_tx (przed mapowaniem)
-    signal record_index   : unsigned(12 downto 0);
+    signal record_index   : unsigned(15 downto 0);
 
     -- frame_rx -> reg_access
     signal request_valid  : std_logic;
@@ -220,7 +220,7 @@ begin
         if v_sum >= v_n then
             v_sum := v_sum - v_n;
         end if;
-        rd_addr <= to_unsigned(v_sum, 13);
+        rd_addr <= to_unsigned(v_sum, 16);
     end process p_read_map;
 
     -- Sekwencja: READ_RECORD ustawia pending, po odpowiedzi startuje blok,

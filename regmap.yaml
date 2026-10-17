@@ -33,7 +33,7 @@ protocol_constants:
   - {name: RECORD_TYPE_DATA,     type: byte,    value: 0xD0, desc: "Typ bloku danych"}
   - {name: RECORD_HEADER_LENGTH, type: natural, value: 64,   desc: "Długość nagłówka w bajtach"}
   - {name: RECORD_SAMPLE_BITS,   type: natural, value: 8,    desc: "Bity na próbkę (obecnie)"}
-  - {name: RECORD_MAX_SAMPLES,   type: natural, value: 8192, desc: "Maksymalna liczba próbek na kanał w rekordzie"}
+  - {name: RECORD_MAX_SAMPLES,   type: natural, value: 65536, desc: "Maksymalna liczba próbek na kanał w rekordzie"}
 
   # Strefy adresów (dekoder sprawdza górne bity)
   - {name: ZONE_ID_LO,           type: byte,    value: 0x00, desc: "Tożsamość, początek"}

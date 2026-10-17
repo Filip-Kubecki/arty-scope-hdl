@@ -10,7 +10,7 @@ use ieee.numeric_std.all;
 
 entity sample_mem is
     generic (
-        G_ADDR_BITS : natural := 13
+        G_ADDR_BITS : natural := 16
     );
     port (
         clk   : in  std_logic;

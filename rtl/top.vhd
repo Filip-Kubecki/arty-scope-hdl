@@ -71,7 +71,7 @@ architecture rtl of top is
     signal rx_activity_counter : unsigned(21 downto 0) := (others => '0');
 
     -- Odczyt pamięci rekordu (control_protocol -> sample_mem)
-    signal control_read_address : unsigned(12 downto 0);
+    signal control_read_address : unsigned(15 downto 0);
     signal memory_read_data     : std_logic_vector(15 downto 0);
 
     -- Akwizycja
@@ -88,11 +88,11 @@ architecture rtl of top is
     signal control_trigger_hysteresis : byte_t;
 
     -- pozycja początku rekordu w buforze cyklicznym (z acquisition_ctrl)
-    signal acquisition_record_base    : unsigned(12 downto 0);
+    signal acquisition_record_base    : unsigned(15 downto 0);
     signal acquisition_mem_write_enable : std_logic;
-    signal acquisition_mem_address     : unsigned(12 downto 0);
+    signal acquisition_mem_address     : unsigned(15 downto 0);
     signal acquisition_mem_data        : std_logic_vector(15 downto 0);
-    signal acquisition_trigger_pointer : unsigned(12 downto 0);
+    signal acquisition_trigger_pointer : unsigned(15 downto 0);
 
     -- ADC (mcp3201)
     signal adc_sample_valid : std_logic;

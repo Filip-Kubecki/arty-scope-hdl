@@ -19,7 +19,7 @@ package regmap_pkg is
     constant RECORD_TYPE_DATA : byte_t := x"D0";  -- Typ bloku danych
     constant RECORD_HEADER_LENGTH : natural := 64;  -- Długość nagłówka w bajtach
     constant RECORD_SAMPLE_BITS : natural := 8;  -- Bity na próbkę (obecnie)
-    constant RECORD_MAX_SAMPLES : natural := 8192;  -- Maksymalna liczba próbek na kanał w rekordzie
+    constant RECORD_MAX_SAMPLES : natural := 65536;  -- Maksymalna liczba próbek na kanał w rekordzie
     constant ZONE_ID_LO : byte_t := x"00";  -- Tożsamość, początek
     constant ZONE_ID_HI : byte_t := x"0F";  -- Tożsamość, koniec
     constant ZONE_COMMAND_LO : byte_t := x"10";  -- Komendy, początek
@@ -49,7 +49,7 @@ package regmap_pkg is
     constant ADDR_GATEWARE_VERSION : byte_t := x"02";  -- planned: Wersja projektu FPGA
     constant ADDR_BUILD_TIMESTAMP : byte_t := x"03";  -- planned: Data builda albo skrót commita
     constant ADDR_CAPABILITIES : byte_t := x"04";  -- planned: Liczba kanałów, maks. długość rekordu, częstotliwości
-    constant ADDR_COMMAND_COMMIT : byte_t := x"10";  -- implemented: Zatwierdzenie konfiguracji oczekującej (dziś bez efektu)
+    constant ADDR_COMMAND_COMMIT : byte_t := x"10";  -- implemented: Zatwierdzenie konfiguracji oczekującej
     constant ADDR_COMMAND_ARM : byte_t := x"11";  -- implemented: Uzbrojenie akwizycji
     constant ADDR_COMMAND_STOP : byte_t := x"12";  -- implemented: Zatrzymanie akwizycji, powrót do IDLE
     constant ADDR_COMMAND_FORCE_TRIGGER : byte_t := x"13";  -- implemented: Ręczne wyzwolenie z ARMED
