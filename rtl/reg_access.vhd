@@ -9,24 +9,28 @@ use work.regmap_pkg.all;
 -- wykonanie operacji, budowa odpowiedzi.
 --
 -- Konfiguracja (kopia oczekująca i aktywna):
---   ACQUISITION_RECORD_LENGTH   1..RECORD_MAX_SAMPLES
+--   ACQUISITION_RECORD_LENGTH   1..limit(maska), patrz niżej
 --   ACQUISITION_CHANNEL_MASK    bit 0 = ch1, bit 1 = ch2; 0 niepoprawne
---   ACQUISITION_PRETRIGGER      0..RECORD_MAX_SAMPLES-1
+--   ACQUISITION_PRETRIGGER      0..limit(maska)-1
 --   TRIGGER_SOURCE              0x00 ch1, 0x01 ch2
 --   TRIGGER_EDGE                0x00 narastająca, 0x01 opadająca, 0x02 obie
 --   TRIGGER_LEVEL               0..255 (kody ADC)
 --   TRIGGER_HYSTERESIS          0..255 (kody ADC)
+--   Limit długości: dwa kanały (11) RECORD_MAX_SAMPLES, jeden kanał (01, 10)
+--   2*RECORD_MAX_SAMPLES (dwie próbki w słowie pamięci).
 --   Zapis: wartość poza zakresem -> ERROR_BAD_VALUE, poprzednia zostaje.
+--   Zapis długości albo maski sprawdza się względem oczekującej drugiej wartości.
 --   Odczyt: kopia oczekująca.
 --
 --   COMMAND_COMMIT: kopiuje oczekującą do aktywnej, tylko w IDLE.
---     Reguły krzyżowe: pre < N, źródło wyzwalania włączone w masce kanałów.
+--     Reguły krzyżowe: długość <= limit(maska), pre < N,
+--     źródło wyzwalania włączone w masce kanałów.
 --     Naruszenie -> ERROR_BAD_VALUE, nic nie zmienia.
 --   COMMAND_RESET_CONFIG: wartości domyślne do kopii oczekującej.
 --
--- Stan akwizycji tylko do odczytu:
---   ACQUISITION_WRITE_POINTER    bieżący adres zapisu w buforze cyklicznym
---   ACQUISITION_TRIGGER_POINTER  adres próbki wyzwalającej (zapamiętany w chwili wyzwolenia)
+-- Stan akwizycji tylko do odczytu (w slotach, 17 bitów):
+--   ACQUISITION_WRITE_POINTER    bieżący slot zapisu w buforze cyklicznym
+--   ACQUISITION_TRIGGER_POINTER  slot próbki wyzwalającej (zapamiętany w chwili wyzwolenia)
 --
 -- Liczniki protokołu (zapis do rejestrów tylko przez COMMAND_CLEAR_COUNTERS):
 --   COUNTER_FRAMES_OK, COUNTER_BAD_MAGIC (impulsy z frame_rx)
@@ -77,8 +81,8 @@ entity reg_access is
         -- stan akwizycji
         acquisition_state           : in  byte_t;
         acquisition_record_id       : in  word_t;
-        acquisition_write_pointer   : in  unsigned(15 downto 0);
-        acquisition_trigger_pointer : in  unsigned(15 downto 0);
+        acquisition_write_pointer   : in  unsigned(16 downto 0);
+        acquisition_trigger_pointer : in  unsigned(16 downto 0);
 
         -- zdarzenia z parsera ramek (impulsy 1 takt)
         frame_ok_pulse  : in  std_logic;
@@ -98,6 +102,17 @@ architecture rtl of reg_access is
     constant DEFAULT_TRIG_EDGE     : byte_t := x"00";
     constant DEFAULT_TRIG_LEVEL    : byte_t := x"80";
     constant DEFAULT_TRIG_HYST     : byte_t := x"00";
+
+    -- Maksymalna długość rekordu dla danej maski kanałów.
+    -- Jeden kanał zajmuje pół słowa, więc mieści się dwa razy więcej próbek.
+    function max_samples (mask : byte_t) return word_t is
+    begin
+        if mask(1 downto 0) = "11" then
+            return std_logic_vector(to_unsigned(RECORD_MAX_SAMPLES, 32));
+        else
+            return std_logic_vector(to_unsigned(2 * RECORD_MAX_SAMPLES, 32));
+        end if;
+    end function max_samples;
 
     -- Rejestry DEBUG_*
     signal debug_scratch0_r : word_t := (others => '0');
@@ -221,7 +236,8 @@ begin
 
                     -- konfiguracja oczekująca: walidacja przy zapisie
                     elsif request_addr = ADDR_ACQUISITION_RECORD_LENGTH then
-                        if unsigned(request_data) >= 1 and unsigned(request_data) <= RECORD_MAX_SAMPLES then
+                        if unsigned(request_data) >= 1
+                           and unsigned(request_data) <= unsigned(max_samples(pending_channel_mask)) then
                             pending_record_length <= request_data;
                             v_data                := request_data;
                         else
@@ -230,19 +246,20 @@ begin
                         end if;
 
                     elsif request_addr = ADDR_ACQUISITION_CHANNEL_MASK then
-                        if request_data(1 downto 0) = "00" then
+                        v_mask := (others => '0');
+                        v_mask(1 downto 0) := request_data(1 downto 0);
+                        if request_data(1 downto 0) = "00"
+                           or unsigned(pending_record_length) > unsigned(max_samples(v_mask)) then
                             v_err  := true;
                             v_code := ERROR_BAD_VALUE;
                         else
-                            v_mask := (others => '0');
-                            v_mask(1 downto 0) := request_data(1 downto 0);
                             pending_channel_mask <= v_mask;
                             v_data := (others => '0');
                             v_data(7 downto 0) := v_mask;
                         end if;
 
                     elsif request_addr = ADDR_ACQUISITION_PRETRIGGER then
-                        if unsigned(request_data) <= RECORD_MAX_SAMPLES - 1 then
+                        if unsigned(request_data) <= unsigned(max_samples(pending_channel_mask)) - 1 then
                             pending_pre_length <= request_data;
                             v_data             := request_data;
                         else
@@ -313,6 +330,9 @@ begin
                     -- COMMIT: tylko w IDLE, z regułami krzyżowymi
                     elsif request_addr = ADDR_COMMAND_COMMIT then
                         if acquisition_state /= x"00" then
+                            v_err  := true;
+                            v_code := ERROR_BAD_VALUE;
+                        elsif unsigned(pending_record_length) > unsigned(max_samples(pending_channel_mask)) then
                             v_err  := true;
                             v_code := ERROR_BAD_VALUE;
                         elsif unsigned(pending_pre_length) >= unsigned(pending_record_length) then
@@ -400,11 +420,11 @@ begin
 
                     elsif request_addr = ADDR_ACQUISITION_WRITE_POINTER then
                         v_data := (others => '0');
-                        v_data(15 downto 0) := std_logic_vector(acquisition_write_pointer);
+                        v_data(16 downto 0) := std_logic_vector(acquisition_write_pointer);
 
                     elsif request_addr = ADDR_ACQUISITION_TRIGGER_POINTER then
                         v_data := (others => '0');
-                        v_data(15 downto 0) := std_logic_vector(acquisition_trigger_pointer);
+                        v_data(16 downto 0) := std_logic_vector(acquisition_trigger_pointer);
 
                     elsif request_addr = ADDR_COUNTER_FRAMES_OK then
                         v_data := std_logic_vector(counter_frames_ok);

@@ -4,7 +4,11 @@ use ieee.numeric_std.all;
 
 -- =============================================================================
 -- sample_mem.vhd
--- Pamięć rekordu: 2**G_ADDR_BITS słów po 16 bitów (słowo = ch2 & ch1).
+-- Pamięć rekordu: 2**G_ADDR_BITS słów po 16 bitów.
+-- Zapis z osobnymi zezwoleniami na bajty:
+--   we_lo -> bity 7..0,  we_hi -> bity 15..8.
+-- Dwa kanały: słowo = ch2 & ch1, oba zezwolenia razem.
+-- Jeden kanał: dwie próbki w słowie, każda zapisuje tylko swój bajt.
 -- Zapis i odczyt synchroniczne. Odczyt daje dane po jednym takcie.
 -- =============================================================================
 
@@ -14,7 +18,8 @@ entity sample_mem is
     );
     port (
         clk   : in  std_logic;
-        we    : in  std_logic;
+        we_lo : in  std_logic;
+        we_hi : in  std_logic;
         waddr : in  unsigned(G_ADDR_BITS - 1 downto 0);
         wdata : in  std_logic_vector(15 downto 0);
         raddr : in  unsigned(G_ADDR_BITS - 1 downto 0);
@@ -32,8 +37,11 @@ begin
     p_mem : process (clk)
     begin
         if rising_edge(clk) then
-            if we = '1' then
-                mem(to_integer(waddr)) <= wdata;
+            if we_lo = '1' then
+                mem(to_integer(waddr))(7 downto 0) <= wdata(7 downto 0);
+            end if;
+            if we_hi = '1' then
+                mem(to_integer(waddr))(15 downto 8) <= wdata(15 downto 8);
             end if;
             rdata <= mem(to_integer(raddr));
         end if;

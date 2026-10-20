@@ -45,7 +45,7 @@ package regmap_pkg is
     constant ADDR_DEVICE_ID : byte_t := x"00";  -- implemented: Identyfikator urządzenia (wartość przykładowa, do potwierdzenia)
     constant VAL_DEVICE_ID : word_t := x"0000AB01";
     constant ADDR_PROTOCOL_VERSION : byte_t := x"01";  -- implemented: Wersja protokołu
-    constant VAL_PROTOCOL_VERSION : word_t := x"00000001";
+    constant VAL_PROTOCOL_VERSION : word_t := x"00000002";
     constant ADDR_GATEWARE_VERSION : byte_t := x"02";  -- planned: Wersja projektu FPGA
     constant ADDR_BUILD_TIMESTAMP : byte_t := x"03";  -- planned: Data builda albo skrót commita
     constant ADDR_CAPABILITIES : byte_t := x"04";  -- planned: Liczba kanałów, maks. długość rekordu, częstotliwości
@@ -61,7 +61,7 @@ package regmap_pkg is
     constant ADDR_ADC_TEST_PATTERN : byte_t := x"21";  -- planned: Wzorzec testowy zamiast próbek z ADC
     constant ADDR_ADC_DELAY : byte_t := x"22";  -- planned: Opóźnienie wejścia ADC
     constant ADDR_ACQUISITION_MODE : byte_t := x"30";  -- planned: Auto, normal lub single
-    constant ADDR_ACQUISITION_RECORD_LENGTH : byte_t := x"31";  -- implemented: Długość rekordu w próbkach na kanał
+    constant ADDR_ACQUISITION_RECORD_LENGTH : byte_t := x"31";  -- implemented: Długość rekordu. 1–131072 przy masce 01 lub 02, 1–65536 przy 03, aktywna po COMMIT
     constant ADDR_ACQUISITION_PRETRIGGER : byte_t := x"32";  -- implemented: Próbki przed wyzwoleniem, na kanał
     constant ADDR_ACQUISITION_DECIMATION : byte_t := x"33";  -- planned: Zmniejszenie częstotliwości próbkowania
     constant ADDR_ACQUISITION_CHANNEL_MASK : byte_t := x"34";  -- implemented: Maska kanałów: bit 0 = kanał 1, bit 1 = kanał 2, 0 niepoprawne

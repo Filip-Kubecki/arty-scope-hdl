@@ -64,7 +64,7 @@ registers:
   # Tożsamość (RO)
   # -------------------------------------------------------------------------
   - {name: DEVICE_ID,                 address: 0x00, access: ro, reset: 0x0000AB01, status: implemented, desc: "Identyfikator urządzenia (wartość przykładowa, do potwierdzenia)"}
-  - {name: PROTOCOL_VERSION,          address: 0x01, access: ro, reset: 0x00000001, status: implemented, desc: "Wersja protokołu"}
+  - {name: PROTOCOL_VERSION,          address: 0x01, access: ro, reset: 0x00000002, status: implemented, desc: "Wersja protokołu"}
   - {name: GATEWARE_VERSION,          address: 0x02, access: ro,                   status: planned,     desc: "Wersja projektu FPGA"}
   - {name: BUILD_TIMESTAMP,           address: 0x03, access: ro,                   status: planned,     desc: "Data builda albo skrót commita"}
   - {name: CAPABILITIES,              address: 0x04, access: ro,                   status: planned,     desc: "Liczba kanałów, maks. długość rekordu, częstotliwości"}
@@ -89,7 +89,7 @@ registers:
   - {name: ADC_DELAY,                 address: 0x22, access: rw,                   status: planned,     desc: "Opóźnienie wejścia ADC"}
 
   - {name: ACQUISITION_MODE,          address: 0x30, access: rw,                   status: planned,     desc: "Auto, normal lub single"}
-  - {name: ACQUISITION_RECORD_LENGTH, address: 0x31, access: rw,                   status: implemented,     desc: "Długość rekordu w próbkach na kanał"}
+  - {name: ACQUISITION_RECORD_LENGTH, address: 0x31, access: rw,                   status: implemented,     desc: "Długość rekordu. 1–131072 przy masce 01 lub 02, 1–65536 przy 03, aktywna po COMMIT"}
   - {name: ACQUISITION_PRETRIGGER,    address: 0x32, access: rw,                   status: implemented,     desc: "Próbki przed wyzwoleniem, na kanał"}
   - {name: ACQUISITION_DECIMATION,    address: 0x33, access: rw,                   status: planned,     desc: "Zmniejszenie częstotliwości próbkowania"}
   - {name: ACQUISITION_CHANNEL_MASK,  address: 0x34, access: rw,                   status: implemented,     desc: "Maska kanałów: bit 0 = kanał 1, bit 1 = kanał 2, 0 niepoprawne"}

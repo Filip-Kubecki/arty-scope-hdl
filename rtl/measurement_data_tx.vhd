@@ -17,16 +17,17 @@ use work.regmap_pkg.all;
 --   13    SAMPLE_BITS (RECORD_SAMPLE_BITS)
 --   14-15 zarezerwowane
 --   16-19 SAMPLES_PER_CH
---   20-63 zarezerwowane
+--   20-23 TRIGGER_POS
+--   24-63 zarezerwowane
 --
--- Próbki: słowo pamięci = ch2 & ch1.
---   mask 01: młodszy bajt każdego słowa (ch1)
---   mask 10: starszy bajt każdego słowa (ch2)
---   mask 11: dla każdego słowa najpierw ch1, potem ch2
---   mask 00: tylko nagłówek, PAYLOAD_LEN = 0
+-- Próbki (rd_addr = indeks próbki w rekordzie, 0..N-1):
+--   mask 11: słowo pamięci = ch2 & ch1; dla każdego słowa najpierw ch1, potem ch2.
+--   mask 01 albo 10: jeden bajt na próbkę. Pamięć trzyma dwie próbki w słowie,
+--     połówkę wybiera rd_half (wejście z ctrl_protocol).
+--   mask 00: tylko nagłówek, PAYLOAD_LEN = 0.
 --
 -- Pamięć: rd_addr jest podawany z opóźnieniem jednego taktu na rd_data
--- (zgodnie z sample_mem). Każde słowo: FETCH, LATCH, potem wysyłanie.
+-- (zgodnie z sample_mem). Każda próbka: FETCH, LATCH, potem wysyłanie.
 --
 -- Rozpoczyna tylko gdy jest w IDLE. Impuls done po wysłaniu ostatniego bajtu danych.
 -- =============================================================================
@@ -45,7 +46,8 @@ entity measurement_data_tx is
         channel_mask : in  byte_t;
 
         -- Odczyt pamięci rekordu
-        rd_addr      : out unsigned(15 downto 0);
+        rd_addr      : out unsigned(16 downto 0);   -- indeks próbki
+        rd_half      : in  std_logic;               -- połówka słowa (jeden kanał)
         rd_data      : in  std_logic_vector(15 downto 0);
 
         -- Strumień do tx
@@ -65,11 +67,13 @@ architecture rtl of measurement_data_tx is
     signal state               : state_t := S_IDLE;
     signal header_shift_reg    : std_logic_vector(511 downto 0) := (others => '0');
     signal header_byte_count   : unsigned(5 downto 0) := (others => '0');
-    signal sample_index        : unsigned(15 downto 0) := (others => '0');
-    signal last_sample_index   : unsigned(15 downto 0) := (others => '0');
+    signal sample_index        : unsigned(16 downto 0) := (others => '0');
+    signal last_sample_index   : unsigned(16 downto 0) := (others => '0');
     signal channel_mask_reg    : byte_t := (others => '0');
-    signal channel_phase       : std_logic := '0';   -- 0: pierwszy bajt słowa, 1: drugi
+    signal dual_reg            : std_logic := '0';   -- '1' gdy mask 11
+    signal channel_phase       : std_logic := '0';   -- dwa kanały: 0 ch1, 1 ch2
     signal sample_word_reg     : std_logic_vector(15 downto 0) := (others => '0');
+    signal sample_half_reg     : std_logic := '0';   -- połówka słowa jednego kanału
     signal done_reg            : std_logic := '0';
 
     -- Zbudowanie 64 bajtów nagłówka. n-ty bajt zajmuje bity [511-8*n : 504-8*n].
@@ -99,14 +103,15 @@ architecture rtl of measurement_data_tx is
     end function build_header;
 
 begin
-    rd_addr <= sample_index;    -- Adres odczytu to indeks bieżącej próbki
+    rd_addr  <= sample_index;    -- indeks bieżącej próbki
     tx_valid <= '1' when (state = S_HEADER) or (state = S_SEND) else '0';
 
     -- W nagłówku: bajt z najstarszych bitów rejestru przesuwnego.
-    -- W próbkach: wybór bajtu słowa wg maski i fazy.
+    -- Dwa kanały: ch1 potem ch2 z tego samego słowa.
+    -- Jeden kanał: bajt wybrany przez połówkę słowa.
     tx_data <= header_shift_reg(511 downto 504) when state = S_HEADER else
-               sample_word_reg(15 downto 8)     when (channel_mask_reg(1) = '1' and
-                                                     (channel_mask_reg(0) = '0' or channel_phase = '1')) else
+               sample_word_reg(15 downto 8)     when (dual_reg = '1' and channel_phase = '1') or
+                                                     (dual_reg = '0' and sample_half_reg = '1') else
                sample_word_reg(7 downto 0);
 
     busy <= '0' when state = S_IDLE else '1';
@@ -148,8 +153,14 @@ begin
                                                              trigger_pos);
                             channel_mask_reg <= channel_mask;
 
+                            if channel_mask(1 downto 0) = "11" then
+                                dual_reg <= '1';
+                            else
+                                dual_reg <= '0';
+                            end if;
+
                             if samples_count > 0 then
-                                last_sample_index <= to_unsigned(samples_count - 1, 16);
+                                last_sample_index <= to_unsigned(samples_count - 1, 17);
                             else
                                 last_sample_index <= (others => '0');
                             end if;
@@ -181,16 +192,17 @@ begin
                     when S_FETCH =>
                         state <= S_LATCH;
 
-                    -- Kopiuje słowo z pamięci do rejestru, bo dane są ważne dopiero w tym momencie.
+                    -- Kopiuje słowo z pamięci i połówkę do rejestrów, bo dane są ważne dopiero teraz.
                     when S_LATCH =>
                         sample_word_reg <= rd_data;
+                        sample_half_reg <= rd_half;
                         state           <= S_SEND;
 
-                    -- Wysyła bajty bieżącego słowa. Przy masce 11 najpierw ch1, potem ch2.
-                    -- Po ostatnim bajcie słowa przechodzi do następnej próbki lub do DONE.
+                    -- Wysyła bajty bieżącej próbki. Dwa kanały: najpierw ch1, potem ch2.
+                    -- Po ostatnim bajcie przechodzi do następnej próbki lub do DONE.
                     when S_SEND =>
                         if tx_ready = '1' then
-                            if channel_mask_reg(1 downto 0) = "11" and channel_phase = '0' then
+                            if dual_reg = '1' and channel_phase = '0' then
                                 -- drugi bajt tego samego słowa
                                 channel_phase <= '1';
                             else

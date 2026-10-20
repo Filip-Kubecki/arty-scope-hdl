@@ -16,8 +16,9 @@ use work.regmap_pkg.all;
 -- Konfiguracja aktywna z reg_access jest wyprowadzana na zewnątrz
 -- (do acquisition_ctrl) oraz używana tutaj do nadajnika rekordu.
 --
--- Odczyt pamięci w bloku: measurement_data_tx liczy indeks próbki od zera,
--- a adres w pamięci cyklicznej to (record_base + indeks) mod N.
+-- Mapowanie odczytu: indeks próbki i (0..N-1) -> slot (record_base + i) mod N.
+--   dwa kanały: adres słowa = slot, połówka nieistotna;
+--   jeden kanał: adres słowa = slot / 2, połówka = slot mod 2.
 -- =============================================================================
 
 entity ctrl_protocol is
@@ -44,24 +45,25 @@ entity ctrl_protocol is
         -- Wyjście debug
         debug_led             : out byte_t;
 
-        -- Stan akwizycji
-        acquisition_state     : in  byte_t;
-        acquisition_record_id : in  word_t;
-        acquisition_write_pointer   : in  unsigned(15 downto 0);
-        acquisition_trigger_pointer : in  unsigned(15 downto 0);
+        -- Stan akwizycji (wskaźniki w slotach)
+        acquisition_state           : in  byte_t;
+        acquisition_record_id       : in  word_t;
+        acquisition_write_pointer   : in  unsigned(16 downto 0);
+        acquisition_trigger_pointer : in  unsigned(16 downto 0);
 
         -- Konfiguracja aktywna (do acquisition_ctrl)
         record_length         : out word_t;
         pre_length            : out word_t;
+        channel_mask          : out byte_t;
         trigger_source        : out byte_t;
         trigger_edge          : out byte_t;
         trigger_level         : out byte_t;
         trigger_hysteresis    : out byte_t;
 
-        -- Pozycja początku rekordu w buforze cyklicznym (z acquisition_ctrl)
-        record_base           : in  unsigned(15 downto 0);
+        -- Pozycja początku rekordu w buforze cyklicznym (slot, z acquisition_ctrl)
+        record_base           : in  unsigned(16 downto 0);
 
-        -- Odczyt pamięci rekordu
+        -- Odczyt pamięci rekordu (adres słowa)
         rd_addr               : out unsigned(15 downto 0);
         rd_data               : in  std_logic_vector(15 downto 0)
     );
@@ -79,7 +81,9 @@ architecture rtl of ctrl_protocol is
     signal measurement_channel_mask   : byte_t;
 
     -- indeks próbki z measurement_data_tx (przed mapowaniem)
-    signal record_index   : unsigned(15 downto 0);
+    signal record_index   : unsigned(16 downto 0) := (others => '0');
+    -- połówka słowa dla jednego kanału (z mapowania)
+    signal rd_half        : std_logic := '0';
 
     -- frame_rx -> reg_access
     signal request_valid  : std_logic;
@@ -143,33 +147,33 @@ begin
 
     u_reg_access : entity work.reg_access
         port map (
-            clk                       => clk,
-            rst                       => rst,
-            request_start             => request_valid,
-            request_cmd               => request_cmd,
-            request_addr              => request_addr,
-            request_data              => request_data,
-            response_valid            => response_valid,
-            response_cmd              => response_cmd,
-            response_addr             => response_addr,
-            response_data             => response_data,
-            cmd_valid                 => cmd_valid,
-            cmd_addr                  => cmd_addr,
-            record_req                => record_req,
-            active_record_length      => control_record_length,
-            active_channel_mask       => measurement_channel_mask,
-            active_pre_length         => control_pre_length,
-            active_trigger_source     => control_trigger_source,
-            active_trigger_edge       => control_trigger_edge,
-            active_trigger_level      => control_trigger_level,
-            active_trigger_hysteresis => control_trigger_hysteresis,
-            acquisition_state         => acquisition_state,
-            acquisition_record_id     => acquisition_record_id,
+            clk                         => clk,
+            rst                         => rst,
+            request_start               => request_valid,
+            request_cmd                 => request_cmd,
+            request_addr                => request_addr,
+            request_data                => request_data,
+            response_valid              => response_valid,
+            response_cmd                => response_cmd,
+            response_addr               => response_addr,
+            response_data               => response_data,
+            cmd_valid                   => cmd_valid,
+            cmd_addr                    => cmd_addr,
+            record_req                  => record_req,
+            active_record_length        => control_record_length,
+            active_channel_mask         => measurement_channel_mask,
+            active_pre_length           => control_pre_length,
+            active_trigger_source       => control_trigger_source,
+            active_trigger_edge         => control_trigger_edge,
+            active_trigger_level        => control_trigger_level,
+            active_trigger_hysteresis   => control_trigger_hysteresis,
+            acquisition_state           => acquisition_state,
+            acquisition_record_id       => acquisition_record_id,
             acquisition_write_pointer   => acquisition_write_pointer,
             acquisition_trigger_pointer => acquisition_trigger_pointer,
-            frame_ok_pulse            => frame_ok,
-            bad_magic_pulse           => bad_magic,
-            debug_led                 => debug_led
+            frame_ok_pulse              => frame_ok,
+            bad_magic_pulse             => bad_magic,
+            debug_led                   => debug_led
         );
 
     u_frame_tx : entity work.frame_tx
@@ -201,6 +205,7 @@ begin
             channel_mask => measurement_channel_mask,
             trigger_pos  => control_pre_length,
             rd_addr      => record_index,
+            rd_half      => rd_half,
             rd_data      => rd_data,
             tx_data      => rec_tx_data,
             tx_valid     => rec_tx_valid,
@@ -210,8 +215,8 @@ begin
             link_up      => link_up
         );
 
-    -- Mapowanie indeksu na adres w buforze cyklicznym: (base + indeks) mod N
-    p_read_map : process (record_index, record_base, control_record_length)
+    -- Mapowanie indeksu na slot i adres słowa: slot = (base + indeks) mod N
+    p_read_map : process (record_index, record_base, control_record_length, measurement_channel_mask)
         variable v_sum : integer;
         variable v_n   : integer;
     begin
@@ -220,7 +225,18 @@ begin
         if v_sum >= v_n then
             v_sum := v_sum - v_n;
         end if;
-        rd_addr <= to_unsigned(v_sum, 16);
+
+        if measurement_channel_mask(1 downto 0) = "11" then
+            rd_addr <= to_unsigned(v_sum, 16);
+            rd_half <= '0';
+        else
+            rd_addr <= to_unsigned(v_sum / 2, 16);
+            if v_sum mod 2 = 1 then
+                rd_half <= '1';
+            else
+                rd_half <= '0';
+            end if;
+        end if;
     end process p_read_map;
 
     -- Sekwencja: READ_RECORD ustawia pending, po odpowiedzi startuje blok,
@@ -262,6 +278,7 @@ begin
     -- konfiguracja na zewnątrz
     record_length      <= control_record_length;
     pre_length         <= control_pre_length;
+    channel_mask       <= measurement_channel_mask;
     trigger_source     <= control_trigger_source;
     trigger_edge       <= control_trigger_edge;
     trigger_level      <= control_trigger_level;

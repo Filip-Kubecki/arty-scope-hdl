@@ -70,7 +70,7 @@ architecture rtl of top is
     signal heartbeat_counter  : unsigned(26 downto 0) := (others => '0');
     signal rx_activity_counter : unsigned(21 downto 0) := (others => '0');
 
-    -- Odczyt pamięci rekordu (control_protocol -> sample_mem)
+    -- Odczyt pamięci rekordu (control_protocol -> sample_mem), adres słowa
     signal control_read_address : unsigned(15 downto 0);
     signal memory_read_data     : std_logic_vector(15 downto 0);
 
@@ -82,17 +82,22 @@ architecture rtl of top is
     -- konfiguracja aktywna (z ctrl_protocol, do acquisition_ctrl)
     signal control_record_length      : word_t;
     signal control_pre_length         : word_t;
+    signal control_channel_mask       : byte_t;
     signal control_trigger_source     : byte_t;
     signal control_trigger_edge       : byte_t;
     signal control_trigger_level      : byte_t;
     signal control_trigger_hysteresis : byte_t;
 
-    -- pozycja początku rekordu w buforze cyklicznym (z acquisition_ctrl)
-    signal acquisition_record_base    : unsigned(15 downto 0);
-    signal acquisition_mem_write_enable : std_logic;
+    -- pozycje w buforze cyklicznym (sloty, 17 bitów)
+    signal acquisition_record_base     : unsigned(16 downto 0);
+    signal acquisition_write_pointer   : unsigned(16 downto 0);
+    signal acquisition_trigger_pointer : unsigned(16 downto 0);
+
+    -- zapis do pamięci (adres słowa, zezwolenia na bajty)
+    signal acquisition_mem_we_lo       : std_logic;
+    signal acquisition_mem_we_hi       : std_logic;
     signal acquisition_mem_address     : unsigned(15 downto 0);
     signal acquisition_mem_data        : std_logic_vector(15 downto 0);
-    signal acquisition_trigger_pointer : unsigned(15 downto 0);
 
     -- ADC (mcp3201)
     signal adc_sample_valid : std_logic;
@@ -166,32 +171,34 @@ begin
 
     u_ctrl : entity work.ctrl_protocol
         port map (
-            clk                   => CLK100MHZ,
-            rst                   => control_reset,
-            link_up               => tcp_client_connected,
-            rx_data               => tcp_rx_data,
-            rx_valid              => tcp_rx_valid,
-            rx_ready              => control_rx_ready,
-            tx_data               => control_tx_data,
-            tx_valid              => control_tx_valid,
-            tx_ready              => control_tx_ready,
-            cmd_valid             => control_command_valid,
-            cmd_addr              => control_command_addr,
-            debug_led             => debug_led_bits,
-            acquisition_state     => acquisition_state,
-            acquisition_record_id => acquisition_record_id,
-            acquisition_write_pointer   => acquisition_mem_address,
+            clk                         => CLK100MHZ,
+            rst                         => control_reset,
+            link_up                     => tcp_client_connected,
+            rx_data                     => tcp_rx_data,
+            rx_valid                    => tcp_rx_valid,
+            rx_ready                    => control_rx_ready,
+            tx_data                     => control_tx_data,
+            tx_valid                    => control_tx_valid,
+            tx_ready                    => control_tx_ready,
+            cmd_valid                   => control_command_valid,
+            cmd_addr                    => control_command_addr,
+            debug_led                   => debug_led_bits,
+            acquisition_state           => acquisition_state,
+            acquisition_record_id       => acquisition_record_id,
+            acquisition_write_pointer   => acquisition_write_pointer,
             acquisition_trigger_pointer => acquisition_trigger_pointer,
-            record_length         => control_record_length,
-            pre_length            => control_pre_length,
-            trigger_source        => control_trigger_source,
-            trigger_edge          => control_trigger_edge,
-            trigger_level         => control_trigger_level,
-            trigger_hysteresis    => control_trigger_hysteresis,
-            record_base           => acquisition_record_base,
-            rd_addr               => control_read_address,
-            rd_data               => memory_read_data
+            record_length               => control_record_length,
+            pre_length                  => control_pre_length,
+            channel_mask                => control_channel_mask,
+            trigger_source              => control_trigger_source,
+            trigger_edge                => control_trigger_edge,
+            trigger_level               => control_trigger_level,
+            trigger_hysteresis          => control_trigger_hysteresis,
+            record_base                 => acquisition_record_base,
+            rd_addr                     => control_read_address,
+            rd_data                     => memory_read_data
         );
+
     u_adc : entity work.adc_mcp3201
         port map (
             clk          => CLK100MHZ,
@@ -216,23 +223,28 @@ begin
             ch2                => adc_ch2,
             record_length      => control_record_length,
             pre_length         => control_pre_length,
+            channel_mask       => control_channel_mask,
             trigger_source     => control_trigger_source,
             trigger_edge       => control_trigger_edge,
             trigger_level      => control_trigger_level,
             trigger_hysteresis => control_trigger_hysteresis,
             enable             => acquisition_enable,
-            mem_we             => acquisition_mem_write_enable,
+            mem_we_lo          => acquisition_mem_we_lo,
+            mem_we_hi          => acquisition_mem_we_hi,
             mem_addr           => acquisition_mem_address,
             mem_data           => acquisition_mem_data,
             record_base        => acquisition_record_base,
             trigger_pointer    => acquisition_trigger_pointer,
+            write_pointer      => acquisition_write_pointer,
             state              => acquisition_state,
             record_id          => acquisition_record_id
         );
+
     u_mem : entity work.sample_mem
         port map (
             clk   => CLK100MHZ,
-            we    => acquisition_mem_write_enable,
+            we_lo => acquisition_mem_we_lo,
+            we_hi => acquisition_mem_we_hi,
             waddr => acquisition_mem_address,
             wdata => acquisition_mem_data,
             raddr => control_read_address,
