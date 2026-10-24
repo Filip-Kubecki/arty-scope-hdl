@@ -81,6 +81,7 @@ Lista generowana z `regmap.yaml` (status `implemented`). Opisy uzupełnia się r
 | `0x17` | `ADDR_COMMAND_READ_RECORD` | Pobranie gotowego rekordu: odpowiedź i blok danych |
 | `0x31` | `ADDR_ACQUISITION_RECORD_LENGTH` | Długość rekordu w próbkach na kanał: 1–131072 przy masce `01` lub `02`, 1–65536 przy `03`, aktywna po COMMIT |
 | `0x32` | `ADDR_ACQUISITION_PRETRIGGER` | Próbki przed wyzwoleniem na kanał, 0 do N−1, aktywne po COMMIT |
+| `0x33` | `ADDR_ACQUISITION_DECIMATION` | Co N-ta próbka trafia do rekordu |
 | `0x34` | `ADDR_ACQUISITION_CHANNEL_MASK` | Maska kanałów: bit 0 = kanał 1, bit 1 = kanał 2, 0 niepoprawne, aktywne po COMMIT |
 | `0x40` | `ADDR_TRIGGER_SOURCE` | Kanał źródłowy wyzwalania: 0 ch1, 1 ch2, aktywny po COMMIT |
 | `0x41` | `ADDR_TRIGGER_EDGE` | Zbocze: 0 narastające, 1 opadające, 2 oba, aktywne po COMMIT |
@@ -140,6 +141,8 @@ Limity `SAMPLES_PER_CH`:
 
 - maska `01` albo `02`: od 1 do 131072,
 - maska `03`: od 1 do 65536 (`RECORD_MAX_SAMPLES`), blok ma wtedy do 131072 bajtów próbek.
+
+Próbki w rekordzie są już po decymacji. Czas rekordu to `SAMPLES_PER_CH × ADDR_ACQUISITION_DECIMATION × 10 ns`.
 
 Bajty zarezerwowane nie są obecnie wypełniane i w przyszłości mogą zyskać znaczenie. Host nie powinien na nich polegać.
 

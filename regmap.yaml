@@ -91,7 +91,7 @@ registers:
   - {name: ACQUISITION_MODE,          address: 0x30, access: rw,                   status: planned,     desc: "Auto, normal lub single"}
   - {name: ACQUISITION_RECORD_LENGTH, address: 0x31, access: rw,                   status: implemented,     desc: "Długość rekordu. 1–131072 przy masce 01 lub 02, 1–65536 przy 03, aktywna po COMMIT"}
   - {name: ACQUISITION_PRETRIGGER,    address: 0x32, access: rw,                   status: implemented,     desc: "Próbki przed wyzwoleniem, na kanał"}
-  - {name: ACQUISITION_DECIMATION,    address: 0x33, access: rw,                   status: planned,     desc: "Zmniejszenie częstotliwości próbkowania"}
+  - {name: ACQUISITION_DECIMATION,    address: 0x33, access: rw,                   status: implemented,     desc: "Co N-ta próbka trafia do rekordu"}
   - {name: ACQUISITION_CHANNEL_MASK,  address: 0x34, access: rw,                   status: implemented,     desc: "Maska kanałów: bit 0 = kanał 1, bit 1 = kanał 2, 0 niepoprawne"}
 
   - {name: TRIGGER_SOURCE,            address: 0x40, access: rw,                   status: implemented,     desc: "Kanał źródłowy wyzwalania"}

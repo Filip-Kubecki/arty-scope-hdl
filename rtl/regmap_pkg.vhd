@@ -63,7 +63,7 @@ package regmap_pkg is
     constant ADDR_ACQUISITION_MODE : byte_t := x"30";  -- planned: Auto, normal lub single
     constant ADDR_ACQUISITION_RECORD_LENGTH : byte_t := x"31";  -- implemented: Długość rekordu. 1–131072 przy masce 01 lub 02, 1–65536 przy 03, aktywna po COMMIT
     constant ADDR_ACQUISITION_PRETRIGGER : byte_t := x"32";  -- implemented: Próbki przed wyzwoleniem, na kanał
-    constant ADDR_ACQUISITION_DECIMATION : byte_t := x"33";  -- planned: Zmniejszenie częstotliwości próbkowania
+    constant ADDR_ACQUISITION_DECIMATION : byte_t := x"33";  -- implemented: Co N-ta próbka trafia do rekordu
     constant ADDR_ACQUISITION_CHANNEL_MASK : byte_t := x"34";  -- implemented: Maska kanałów: bit 0 = kanał 1, bit 1 = kanał 2, 0 niepoprawne
     constant ADDR_TRIGGER_SOURCE : byte_t := x"40";  -- implemented: Kanał źródłowy wyzwalania
     constant ADDR_TRIGGER_EDGE : byte_t := x"41";  -- implemented: Zbocze: narastające, opadające lub oba
