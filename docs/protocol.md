@@ -87,6 +87,8 @@ Lista generowana z `regmap.yaml` (status `implemented`). Opisy uzupełnia się r
 | `0x41` | `ADDR_TRIGGER_EDGE` | Zbocze: 0 narastające, 1 opadające, 2 oba, aktywne po COMMIT |
 | `0x42` | `ADDR_TRIGGER_LEVEL` | Poziom wyzwalania w kodach ADC, 0–255, aktywny po COMMIT |
 | `0x43` | `ADDR_TRIGGER_HYSTERESIS` | Pasmo histerezy wokół poziomu, kody ADC, 0–255, aktywne po COMMIT |
+| `0x51` | `ADDR_CHANNEL1_OFFSET` | Kod DAC MCP4822, offset kanału 1, 0–4095, aktywne po COMMIT |
+| `0x61` | `ADDR_CHANNEL2_OFFSET` | Kod DAC MCP4822, offset kanału 2, 0–4095, aktywne po COMMIT |
 | `0x90` | `ADDR_COUNTER_FRAMES_OK` | Poprawnie przetworzone ramki |
 | `0x91` | `ADDR_COUNTER_BAD_MAGIC` | Bajty lub ramki odrzucone przez zły magic |
 | `0x92` | `ADDR_COUNTER_UNKNOWN_COMMAND` | Nieznane komendy |

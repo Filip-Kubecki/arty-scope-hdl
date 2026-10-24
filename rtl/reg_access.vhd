@@ -16,6 +16,8 @@ use work.regmap_pkg.all;
 --   TRIGGER_EDGE                0x00 narastająca, 0x01 opadająca, 0x02 obie
 --   TRIGGER_LEVEL               0..255 (kody ADC)
 --   TRIGGER_HYSTERESIS          0..255 (kody ADC)
+--   CHANNEL1_OFFSET             0..4095 (kod DAC MCP4822, kanał A)
+--   CHANNEL2_OFFSET             0..4095 (kod DAC MCP4822, kanał B)
 --   Limit długości: dwa kanały (11) RECORD_MAX_SAMPLES, jeden kanał (01, 10)
 --   2*RECORD_MAX_SAMPLES (dwie próbki w słowie pamięci).
 --   Zapis: wartość poza zakresem -> ERROR_BAD_VALUE, poprzednia zostaje.
@@ -26,6 +28,7 @@ use work.regmap_pkg.all;
 --     Reguły krzyżowe: długość <= limit(maska), pre < N,
 --     źródło wyzwalania włączone w masce kanałów.
 --     Naruszenie -> ERROR_BAD_VALUE, nic nie zmienia.
+--     Udany COMMIT daje impuls commit_ok_pulse (top wysyła offsety do DAC).
 --   COMMAND_RESET_CONFIG: wartości domyślne do kopii oczekującej.
 --
 -- Stan akwizycji tylko do odczytu (w slotach, 17 bitów):
@@ -78,6 +81,11 @@ entity reg_access is
         active_trigger_level      : out byte_t;
         active_trigger_hysteresis : out byte_t;
 
+        -- offsety DAC (aktywne) i impuls po udanym COMMIT
+        active_offset_a           : out std_logic_vector(11 downto 0);
+        active_offset_b           : out std_logic_vector(11 downto 0);
+        commit_ok_pulse           : out std_logic;
+
         -- stan akwizycji
         acquisition_state           : in  byte_t;
         acquisition_record_id       : in  word_t;
@@ -102,6 +110,7 @@ architecture rtl of reg_access is
     constant DEFAULT_TRIG_EDGE     : byte_t := x"00";
     constant DEFAULT_TRIG_LEVEL    : byte_t := x"80";
     constant DEFAULT_TRIG_HYST     : byte_t := x"00";
+    constant DEFAULT_OFFSET        : std_logic_vector(11 downto 0) := x"800";  -- środek skali
 
     -- Maksymalna długość rekordu dla danej maski kanałów.
     -- Jeden kanał zajmuje pół słowa, więc mieści się dwa razy więcej próbek.
@@ -127,6 +136,8 @@ architecture rtl of reg_access is
     signal pending_trigger_edge       : byte_t := DEFAULT_TRIG_EDGE;
     signal pending_trigger_level      : byte_t := DEFAULT_TRIG_LEVEL;
     signal pending_trigger_hysteresis : byte_t := DEFAULT_TRIG_HYST;
+    signal pending_offset_a           : std_logic_vector(11 downto 0) := DEFAULT_OFFSET;
+    signal pending_offset_b           : std_logic_vector(11 downto 0) := DEFAULT_OFFSET;
 
     -- Konfiguracja: kopia aktywna
     signal active_record_length_r      : word_t := DEFAULT_RECORD_LENGTH;
@@ -136,6 +147,9 @@ architecture rtl of reg_access is
     signal active_trigger_edge_r       : byte_t := DEFAULT_TRIG_EDGE;
     signal active_trigger_level_r      : byte_t := DEFAULT_TRIG_LEVEL;
     signal active_trigger_hysteresis_r : byte_t := DEFAULT_TRIG_HYST;
+    signal active_offset_a_r           : std_logic_vector(11 downto 0) := DEFAULT_OFFSET;
+    signal active_offset_b_r           : std_logic_vector(11 downto 0) := DEFAULT_OFFSET;
+    signal commit_ok_r                 : std_logic := '0';
 
     -- Liczniki protokołu
     signal counter_frames_ok        : unsigned(31 downto 0) := (others => '0');
@@ -168,6 +182,9 @@ begin
     active_trigger_edge       <= active_trigger_edge_r;
     active_trigger_level      <= active_trigger_level_r;
     active_trigger_hysteresis <= active_trigger_hysteresis_r;
+    active_offset_a           <= active_offset_a_r;
+    active_offset_b           <= active_offset_b_r;
+    commit_ok_pulse           <= commit_ok_r;
     debug_led                 <= debug_led_r(7 downto 0);
 
     p_req : process (clk)
@@ -181,8 +198,9 @@ begin
             response_valid_r <= '0';
             cmd_valid_r      <= '0';
             record_req_r     <= '0';
+            commit_ok_r      <= '0';
 
-            -- zdarzenia z parsera zwiększają liczniki niezależnie od żądania
+            -- zdarzenia z parsera ramek zwiększają liczniki niezależnie od żądania
             if frame_ok_pulse = '1' then
                 counter_frames_ok <= counter_frames_ok + 1;
             end if;
@@ -201,6 +219,8 @@ begin
                 pending_trigger_edge          <= DEFAULT_TRIG_EDGE;
                 pending_trigger_level         <= DEFAULT_TRIG_LEVEL;
                 pending_trigger_hysteresis    <= DEFAULT_TRIG_HYST;
+                pending_offset_a              <= DEFAULT_OFFSET;
+                pending_offset_b              <= DEFAULT_OFFSET;
                 active_record_length_r        <= DEFAULT_RECORD_LENGTH;
                 active_channel_mask_r         <= DEFAULT_CHANNEL_MASK;
                 active_pre_length_r           <= DEFAULT_PRE_LENGTH;
@@ -208,6 +228,8 @@ begin
                 active_trigger_edge_r         <= DEFAULT_TRIG_EDGE;
                 active_trigger_level_r        <= DEFAULT_TRIG_LEVEL;
                 active_trigger_hysteresis_r   <= DEFAULT_TRIG_HYST;
+                active_offset_a_r             <= DEFAULT_OFFSET;
+                active_offset_b_r             <= DEFAULT_OFFSET;
                 counter_frames_ok             <= (others => '0');
                 counter_bad_magic             <= (others => '0');
                 counter_unknown_command       <= (others => '0');
@@ -303,6 +325,21 @@ begin
                             v_code := ERROR_BAD_VALUE;
                         end if;
 
+                    -- offsety DAC: 12 bitów, 0..4095
+                    elsif request_addr = ADDR_CHANNEL1_OFFSET or request_addr = ADDR_CHANNEL2_OFFSET then
+                        if unsigned(request_data) <= 4095 then
+                            if request_addr = ADDR_CHANNEL1_OFFSET then
+                                pending_offset_a <= request_data(11 downto 0);
+                            else
+                                pending_offset_b <= request_data(11 downto 0);
+                            end if;
+                            v_data := (others => '0');
+                            v_data(11 downto 0) := request_data(11 downto 0);
+                        else
+                            v_err  := true;
+                            v_code := ERROR_BAD_VALUE;
+                        end if;
+
                     -- rejestry tylko do odczytu
                     elsif request_addr = ADDR_DEVICE_ID or request_addr = ADDR_PROTOCOL_VERSION
                           or request_addr = ADDR_DEBUG_CONST
@@ -350,6 +387,9 @@ begin
                             active_trigger_edge_r       <= pending_trigger_edge;
                             active_trigger_level_r      <= pending_trigger_level;
                             active_trigger_hysteresis_r <= pending_trigger_hysteresis;
+                            active_offset_a_r           <= pending_offset_a;
+                            active_offset_b_r           <= pending_offset_b;
+                            commit_ok_r                 <= '1';
                             v_data                      := (others => '0');
                         end if;
 
@@ -362,6 +402,8 @@ begin
                         pending_trigger_edge       <= DEFAULT_TRIG_EDGE;
                         pending_trigger_level      <= DEFAULT_TRIG_LEVEL;
                         pending_trigger_hysteresis <= DEFAULT_TRIG_HYST;
+                        pending_offset_a           <= DEFAULT_OFFSET;
+                        pending_offset_b           <= DEFAULT_OFFSET;
                         v_data                     := (others => '0');
 
                     -- czyszczenie liczników: obsługiwane tutaj, bez cmd_valid
@@ -411,6 +453,14 @@ begin
 
                     elsif request_addr = ADDR_TRIGGER_HYSTERESIS then
                         v_data := x"000000" & pending_trigger_hysteresis;
+
+                    elsif request_addr = ADDR_CHANNEL1_OFFSET then
+                        v_data := (others => '0');
+                        v_data(11 downto 0) := pending_offset_a;
+
+                    elsif request_addr = ADDR_CHANNEL2_OFFSET then
+                        v_data := (others => '0');
+                        v_data(11 downto 0) := pending_offset_b;
 
                     elsif request_addr = ADDR_ACQUISITION_STATE then
                         v_data := x"000000" & acquisition_state;

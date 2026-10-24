@@ -101,9 +101,9 @@ registers:
   - {name: TRIGGER_HOLDOFF,           address: 0x44, access: rw,                   status: planned,     desc: "Martwy czas po wyzwoleniu, w próbkach"}
 
   - {name: CHANNEL1_GAIN,             address: 0x50, access: rw,                   status: planned,     desc: "Słowo wzmocnienia AD8370 i bit zakresu, kanał 1"}
-  - {name: CHANNEL1_OFFSET,           address: 0x51, access: rw,                   status: planned,     desc: "Kod DAC MCP4822, kanał 1"}
+  - {name: CHANNEL1_OFFSET,           address: 0x51, access: rw,                   status: implemented,     desc: "Kod DAC MCP4822, kanał 1"}
   - {name: CHANNEL2_GAIN,             address: 0x60, access: rw,                   status: planned,     desc: "Słowo wzmocnienia AD8370 i bit zakresu, kanał 2"}
-  - {name: CHANNEL2_OFFSET,           address: 0x61, access: rw,                   status: planned,     desc: "Kod DAC MCP4822, kanał 2"}
+  - {name: CHANNEL2_OFFSET,           address: 0x61, access: rw,                   status: implemented,     desc: "Kod DAC MCP4822, kanał 2"}
 
   # -------------------------------------------------------------------------
   # Status (RO)

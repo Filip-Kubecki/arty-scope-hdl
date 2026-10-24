@@ -60,6 +60,11 @@ entity ctrl_protocol is
         trigger_level         : out byte_t;
         trigger_hysteresis    : out byte_t;
 
+        -- Offsety DAC (aktywne) i impuls po udanym COMMIT
+        offset_a              : out std_logic_vector(11 downto 0);
+        offset_b              : out std_logic_vector(11 downto 0);
+        commit_ok             : out std_logic;
+
         -- Pozycja początku rekordu w buforze cyklicznym (slot, z acquisition_ctrl)
         record_base           : in  unsigned(16 downto 0);
 
@@ -167,6 +172,9 @@ begin
             active_trigger_edge         => control_trigger_edge,
             active_trigger_level        => control_trigger_level,
             active_trigger_hysteresis   => control_trigger_hysteresis,
+            active_offset_a             => offset_a,
+            active_offset_b             => offset_b,
+            commit_ok_pulse             => commit_ok,
             acquisition_state           => acquisition_state,
             acquisition_record_id       => acquisition_record_id,
             acquisition_write_pointer   => acquisition_write_pointer,

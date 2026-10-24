@@ -20,6 +20,9 @@ use work.regmap_pkg.all;
 --
 -- LED-y RGB (led0..led2) pokazują debug_led z ctrl_protocol, bit = kolor.
 --
+-- DAC MCP4822 (offsety kanałów): wysyłany po COMMIT (commit_ok) oraz raz
+-- po resecie, żeby wyjścia dostały wartości z rejestrów.
+--
 -- BTN0 resetuje układ.
 -- =============================================================================
 
@@ -40,6 +43,12 @@ entity top is
         ADC_CLK     : out std_logic;
         ADC_CS      : out std_logic;
         ADC_DOUT    : in  std_logic;
+
+        -- DAC (MCP4822, PMOD D)
+        dac_cs_n    : out std_logic;
+        dac_sck     : out std_logic;
+        dac_sdi     : out std_logic;
+        dac_ldac_n  : out std_logic;
 
         -- Ethernet MII
         eth_ref_clk : out   std_logic;
@@ -88,6 +97,17 @@ architecture rtl of top is
     signal control_trigger_level      : byte_t;
     signal control_trigger_hysteresis : byte_t;
 
+    -- offsety DAC (aktywne) i impuls po COMMIT
+    signal control_offset_a           : std_logic_vector(11 downto 0);
+    signal control_offset_b           : std_logic_vector(11 downto 0);
+    signal control_commit_ok          : std_logic;
+
+    -- sterowanie DAC
+    signal dac_reset                  : std_logic;
+    signal dac_update                 : std_logic;
+    signal dac_boot_kick              : std_logic := '0';
+    signal dac_boot_pending           : std_logic := '1';
+
     -- pozycje w buforze cyklicznym (sloty, 17 bitów)
     signal acquisition_record_base     : unsigned(16 downto 0);
     signal acquisition_write_pointer   : unsigned(16 downto 0);
@@ -133,6 +153,8 @@ begin
     stream_mode       <= sw(0);
     control_reset     <= (not system_reset_n) or stream_mode;
     acquisition_reset <= not system_reset_n;
+    dac_reset         <= not system_reset_n;
+    dac_update        <= dac_boot_kick or control_commit_ok;
 
     u_tcp : entity work.fc1002_mii_tcp_link
         generic map (
@@ -194,6 +216,9 @@ begin
             trigger_edge                => control_trigger_edge,
             trigger_level               => control_trigger_level,
             trigger_hysteresis          => control_trigger_hysteresis,
+            offset_a                    => control_offset_a,
+            offset_b                    => control_offset_b,
+            commit_ok                   => control_commit_ok,
             record_base                 => acquisition_record_base,
             rd_addr                     => control_read_address,
             rd_data                     => memory_read_data
@@ -210,6 +235,24 @@ begin
             adc_clk      => ADC_CLK,
             adc_cs       => ADC_CS,
             adc_dout     => ADC_DOUT
+        );
+
+    u_dac : entity work.mcp4822_dac
+        generic map (
+            G_HALF_PERIOD => 5,
+            G_GAIN_1X     => true
+        )
+        port map (
+            clk        => CLK100MHZ,
+            rst        => dac_reset,
+            update     => dac_update,
+            code_a     => control_offset_a,
+            code_b     => control_offset_b,
+            busy       => open,
+            dac_cs_n   => dac_cs_n,
+            dac_sck    => dac_sck,
+            dac_sdi    => dac_sdi,
+            dac_ldac_n => dac_ldac_n
         );
 
     u_acq : entity work.acquisition_ctrl
@@ -250,6 +293,20 @@ begin
             raddr => control_read_address,
             rdata => memory_read_data
         );
+
+    -- Impuls startowy DAC po resecie: wyjścia dostają kody z rejestrów
+    p_dac_boot : process (CLK100MHZ)
+    begin
+        if rising_edge(CLK100MHZ) then
+            dac_boot_kick <= '0';
+            if system_reset_n = '0' then
+                dac_boot_pending <= '1';
+            elsif dac_boot_pending = '1' then
+                dac_boot_pending <= '0';
+                dac_boot_kick    <= '1';
+            end if;
+        end if;
+    end process p_dac_boot;
 
     -- Wybór źródła bajtów wysyłanych do TCP
     tcp_tx_data      <= stream_test_data  when stream_mode = '1' else control_tx_data;
