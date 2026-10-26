@@ -1,6 +1,5 @@
 library ieee;
 use ieee.std_logic_1164.all;
-use ieee.numeric_std.all;
 use work.regmap_pkg.all;
 
 -- =============================================================================
@@ -9,22 +8,18 @@ use work.regmap_pkg.all;
 -- Tor danych kanału: AD9288 -> MC74LCX374 (rejestr na tym samym zegarze ENC)
 -- -> piny FPGA -> rejestry IOB w tym module.
 --
--- Zegar ENC (ENCA dla kanału A, ENCB dla kanału B) wyprowadza FPGA przez
--- ODDR z jednego MMCM. Ten sam zegar taktuje rejestr 74LCX374 danego kanału.
+-- Zegar ENC (ENCA dla kanału A, ENCB dla kanału B) generuje top przez ODDR
+-- z CLK100MHZ. Ten sam zegar taktuje rejestr 74LCX374 danego kanału.
+-- Faza ENC względem clk jest do ustawienia skanem (IDELAY/MMCM), nie z góry.
 --
--- Stałe ustawienia:
+-- Stałe ustawienia (ustawia top):
 --   DFS = niski (offset binary, środek skali 0x80)
---   S1  = 1, S2 = 0 (tryb normalny)
+--   S1  = 1, S2 = 0 (tryb normalny, kanał B nieaktywny gdy nie polutowany)
 --   OC rejestrów 374 = GND (wyjścia zawsze aktywne)
 --
--- Latencja od zbocza ENC do rejestru IOB: ok. 4 takty przetwornika + 1 takt
--- 374 + 1 takt IOB. Jest stała, więc nie wpływa na wyzwalanie.
---
--- Okno danych przy FPGA jest wąskie. Zapas setup/hold w samym 374 to ok.
--- 1,5 ns / 0,5 ns przed skew na płytce, a 374 dokłada własne opóźnienie CP->Q
--- (1,5-8,5 ns). Dlatego przed rejestrami IOB przewidziane jest opóźnienie IDELAY
--- na każdej linii danych. Wartość dobieramy skanem na płytce, nie z góry.
--- Opóźnienie IDELAY dodawane jest w osobnym module (po podaniu pinów).
+-- Próbka jest zatrzaskiwana na zboczu clk i ma stałe opóźnienie 1 takt.
+-- Sygnał enable jest też zatrzaskiwany na tym samym zboczu, więc sample_valid
+-- jest wyrównany z ch1/ch2.
 --
 -- Decymacja nie jest tutaj. Działa w osobnym module sample_decimator na
 -- tym samym interfejsie próbek.
@@ -32,7 +27,7 @@ use work.regmap_pkg.all;
 
 entity adc_ad9288 is
     port (
-        clk          : in  std_logic;                     -- zegar capture (100 MHz, z MMCM)
+        clk          : in  std_logic;                     -- zegar capture (100 MHz)
         enable       : in  std_logic;                     -- '1' = próbki ważne
         adc_a_data   : in  std_logic_vector(7 downto 0);  -- wyjście 374, kanał A
         adc_b_data   : in  std_logic_vector(7 downto 0);  -- wyjście 374, kanał B

@@ -1,0 +1,9 @@
+v 4
+file . "tb/tb_reg_access_gain.vhd" "d0feec85bc09d88b01a8de3ca94395675d633903" "20261024161244.809":
+  entity tb_reg_access_gain at 1( 0) + 0 on 20;
+  architecture sim of tb_reg_access_gain at 24( 895) + 0 on 21;
+file . "rtl/regmap_pkg.vhd" "5661f78099bb28dedf2842f6095e97c3755c4d6a" "20261024161244.796":
+  package regmap_pkg at 2( 50) + 0 on 17;
+file . "rtl/reg_access.vhd" "83dbc9fd1f5ffeb4ea6f74c8d34f90d215203e4b" "20261024161244.803":
+  entity reg_access at 1( 0) + 0 on 18;
+  architecture rtl of reg_access at 110( 4909) + 0 on 19;

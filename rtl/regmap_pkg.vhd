@@ -70,9 +70,9 @@ package regmap_pkg is
     constant ADDR_TRIGGER_LEVEL : byte_t := x"42";  -- implemented: Poziom w jednostkach ADC
     constant ADDR_TRIGGER_HYSTERESIS : byte_t := x"43";  -- implemented: Pasmo wokół poziomu wyzwalania
     constant ADDR_TRIGGER_HOLDOFF : byte_t := x"44";  -- planned: Martwy czas po wyzwoleniu, w próbkach
-    constant ADDR_CHANNEL1_GAIN : byte_t := x"50";  -- planned: Słowo wzmocnienia AD8370 i bit zakresu, kanał 1
+    constant ADDR_CHANNEL1_GAIN : byte_t := x"50";  -- implemented: Słowo wzmocnienia AD8370 i bit zakresu, kanał 1
     constant ADDR_CHANNEL1_OFFSET : byte_t := x"51";  -- implemented: Kod DAC MCP4822, kanał 1
-    constant ADDR_CHANNEL2_GAIN : byte_t := x"60";  -- planned: Słowo wzmocnienia AD8370 i bit zakresu, kanał 2
+    constant ADDR_CHANNEL2_GAIN : byte_t := x"60";  -- implemented: Słowo wzmocnienia AD8370 i bit zakresu, kanał 2
     constant ADDR_CHANNEL2_OFFSET : byte_t := x"61";  -- implemented: Kod DAC MCP4822, kanał 2
     constant ADDR_SYSTEM_STATUS : byte_t := x"80";  -- planned: Bity chwilowe: zegary, połączenie TCP, zegar ADC
     constant ADDR_SYSTEM_FLAGS : byte_t := x"81";  -- planned: Lepkie flagi zdarzeń

@@ -2,6 +2,8 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 use work.regmap_pkg.all;
+library unisim;
+use unisim.vcomponents.all;
 
 -- =============================================================================
 -- top.vhd
@@ -23,6 +25,14 @@ use work.regmap_pkg.all;
 -- DAC MCP4822 (offsety kanałów): wysyłany po COMMIT (commit_ok) oraz raz
 -- po resecie, żeby wyjścia dostały wartości z rejestrów.
 --
+-- PGA AD8370 (kanał A): słowo wzmocnienia wysyłane po COMMIT oraz raz
+-- po resecie. PWUP podciągnięty do VCC na płytce.
+--
+-- ADC AD9288 (2 kanały): zegar ENC A i B z ODDR, 100 MHz bez dzielnika
+-- (D1='1', D2='0' na CLK100MHZ). Wybór trybu: S1=1, S2=1 (działa w testach;
+-- tryb normalny według noty to S1=1, S2=0 - do sprawdzenia).
+-- Półokres 5 ns jest na granicy minimalnej szerokości impulsu w nocie (4,3 ns).
+--
 -- BTN0 resetuje układ.
 -- =============================================================================
 
@@ -39,16 +49,24 @@ entity top is
         led2_r, led2_g, led2_b : out std_logic;
         led3_r, led3_g, led3_b : out std_logic;
 
-        -- ADC (MCP3201)
-        ADC_CLK     : out std_logic;
-        ADC_CS      : out std_logic;
-        ADC_DOUT    : in  std_logic;
+        -- ADC AD9288 (równoległy, 100 MSPS, 2 kanały)
+        adc_sel1    : out std_logic;   -- A11, S1
+        adc_sel2    : out std_logic;   -- B11, S2
+        adc_enc_a   : out std_logic;   -- PMOD D, D4
+        adc_enc_b   : out std_logic;   -- PMOD A, D12
+        adc_a_data  : in  std_logic_vector(7 downto 0);
+        adc_b_data  : in  std_logic_vector(7 downto 0);
 
         -- DAC (MCP4822, PMOD D)
         dac_cs_n    : out std_logic;
         dac_sck     : out std_logic;
         dac_sdi     : out std_logic;
         dac_ldac_n  : out std_logic;
+
+        -- PGA AD8370, kanał A (PMOD D: clk E2, data D2, latch H2)
+        pga_a_clk   : out std_logic;
+        pga_a_data  : out std_logic;
+        pga_a_latch : out std_logic;
 
         -- Ethernet MII
         eth_ref_clk : out   std_logic;
@@ -102,11 +120,16 @@ architecture rtl of top is
     signal control_offset_b           : std_logic_vector(11 downto 0);
     signal control_commit_ok          : std_logic;
 
-    -- sterowanie DAC
+    -- wzmocnienie PGA (aktywne, słowo AD8370)
+    signal control_gain_a             : byte_t;
+    signal control_gain_b             : byte_t;
+
+    -- sterowanie DAC i PGA
     signal dac_reset                  : std_logic;
     signal dac_update                 : std_logic;
     signal dac_boot_kick              : std_logic := '0';
     signal dac_boot_pending           : std_logic := '1';
+    signal pga_a_update               : std_logic;
 
     -- pozycje w buforze cyklicznym (sloty, 17 bitów)
     signal acquisition_record_base     : unsigned(16 downto 0);
@@ -119,7 +142,7 @@ architecture rtl of top is
     signal acquisition_mem_address     : unsigned(15 downto 0);
     signal acquisition_mem_data        : std_logic_vector(15 downto 0);
 
-    -- ADC (mcp3201)
+    -- ADC (AD9288)
     signal adc_sample_valid : std_logic;
     signal adc_ch1          : byte_t;
     signal adc_ch2          : byte_t;
@@ -155,6 +178,45 @@ begin
     acquisition_reset <= not system_reset_n;
     dac_reset         <= not system_reset_n;
     dac_update        <= dac_boot_kick or control_commit_ok;
+    pga_a_update      <= dac_boot_kick or control_commit_ok;
+
+    -- ADC AD9288: wybór trybu (S1=1, S2=1, jak w testach)
+    adc_sel1  <= '1';
+    adc_sel2  <= '1';
+
+    -- zegar kodujący 100 MHz: ODDR z CLK100MHZ, D1='1' na zboczu narastającym,
+    -- D2='0' na opadającym -> przebieg o okresie 10 ns
+    u_adc_enc_a : ODDR
+        generic map (
+            DDR_CLK_EDGE => "OPPOSITE_EDGE",
+            INIT         => '0',
+            SRTYPE       => "SYNC"
+        )
+        port map (
+            C  => CLK100MHZ,
+            CE => '1',
+            D1 => '1',
+            D2 => '0',
+            R  => '0',
+            S  => '0',
+            Q  => adc_enc_a
+        );
+
+    u_adc_enc_b : ODDR
+        generic map (
+            DDR_CLK_EDGE => "OPPOSITE_EDGE",
+            INIT         => '0',
+            SRTYPE       => "SYNC"
+        )
+        port map (
+            C  => CLK100MHZ,
+            CE => '1',
+            D1 => '1',
+            D2 => '0',
+            R  => '0',
+            S  => '0',
+            Q  => adc_enc_b
+        );
 
     u_tcp : entity work.fc1002_mii_tcp_link
         generic map (
@@ -219,22 +281,22 @@ begin
             offset_a                    => control_offset_a,
             offset_b                    => control_offset_b,
             commit_ok                   => control_commit_ok,
+            gain_a                      => control_gain_a,
+            gain_b                      => control_gain_b,
             record_base                 => acquisition_record_base,
             rd_addr                     => control_read_address,
             rd_data                     => memory_read_data
         );
 
-    u_adc : entity work.adc_mcp3201
+    u_adc : entity work.adc_ad9288
         port map (
             clk          => CLK100MHZ,
-            rst          => acquisition_reset,
             enable       => acquisition_enable,
+            adc_a_data   => adc_a_data,
+            adc_b_data   => adc_b_data,
             sample_valid => adc_sample_valid,
             ch1          => adc_ch1,
-            ch2          => adc_ch2,
-            adc_clk      => ADC_CLK,
-            adc_cs       => ADC_CS,
-            adc_dout     => ADC_DOUT
+            ch2          => adc_ch2
         );
 
     u_dac : entity work.mcp4822_dac
@@ -253,6 +315,21 @@ begin
             dac_sck    => dac_sck,
             dac_sdi    => dac_sdi,
             dac_ldac_n => dac_ldac_n
+        );
+
+    u_pga_a : entity work.ad8370_pga
+        generic map (
+            G_HALF_PERIOD => 5
+        )
+        port map (
+            clk       => CLK100MHZ,
+            rst       => dac_reset,
+            update    => pga_a_update,
+            gain_word => control_gain_a,
+            busy      => open,
+            pga_clk   => pga_a_clk,
+            pga_data  => pga_a_data,
+            pga_latch => pga_a_latch
         );
 
     u_acq : entity work.acquisition_ctrl
@@ -288,13 +365,13 @@ begin
             clk   => CLK100MHZ,
             we_lo => acquisition_mem_we_lo,
             we_hi => acquisition_mem_we_hi,
-            waddr => acquisition_mem_address,
+            waddr => acquisition_mem_address(14 downto 0),
             wdata => acquisition_mem_data,
-            raddr => control_read_address,
+            raddr => control_read_address(14 downto 0),
             rdata => memory_read_data
         );
 
-    -- Impuls startowy DAC po resecie: wyjścia dostają kody z rejestrów
+    -- Impuls startowy DAC i PGA po resecie: wyjścia dostają kody z rejestrów
     p_dac_boot : process (CLK100MHZ)
     begin
         if rising_edge(CLK100MHZ) then

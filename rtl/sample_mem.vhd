@@ -4,17 +4,21 @@ use ieee.numeric_std.all;
 
 -- =============================================================================
 -- sample_mem.vhd
--- Pamięć rekordu: 2**G_ADDR_BITS słów po 16 bitów.
+-- Pamięć rekordu: 2**G_ADDR_BITS słów po 16 bitów (domyślnie 2**15 = 32768).
 -- Zapis z osobnymi zezwoleniami na bajty:
 --   we_lo -> bity 7..0,  we_hi -> bity 15..8.
 -- Dwa kanały: słowo = ch2 & ch1, oba zezwolenia razem.
 -- Jeden kanał: dwie próbki w słowie, każda zapisuje tylko swój bajt.
 -- Zapis i odczyt synchroniczne. Odczyt daje dane po jednym takcie.
+--
+-- 15 bitów adresu zamiast 16: przy 65536 słowach Vivado kaskadował RAMB36
+-- z niespójnym bitem 15 (DRC REQP-1962). Musi zgadzać się z RECORD_MAX_SAMPLES
+-- w regmap.yaml.
 -- =============================================================================
 
 entity sample_mem is
     generic (
-        G_ADDR_BITS : natural := 16
+        G_ADDR_BITS : natural := 15
     );
     port (
         clk   : in  std_logic;

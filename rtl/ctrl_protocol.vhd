@@ -65,6 +65,10 @@ entity ctrl_protocol is
         offset_b              : out std_logic_vector(11 downto 0);
         commit_ok             : out std_logic;
 
+        -- Wzmocnienie PGA AD8370 (aktywne, słowo: bit 7 zakres, bity 6..0 kod)
+        gain_a                : out byte_t;
+        gain_b                : out byte_t;
+
         -- Pozycja początku rekordu w buforze cyklicznym (slot, z acquisition_ctrl)
         record_base           : in  unsigned(16 downto 0);
 
@@ -174,6 +178,8 @@ begin
             active_trigger_hysteresis   => control_trigger_hysteresis,
             active_offset_a             => offset_a,
             active_offset_b             => offset_b,
+            active_gain_a               => gain_a,
+            active_gain_b               => gain_b,
             commit_ok_pulse             => commit_ok,
             acquisition_state           => acquisition_state,
             acquisition_record_id       => acquisition_record_id,
