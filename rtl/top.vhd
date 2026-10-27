@@ -9,18 +9,14 @@ use unisim.vcomponents.all;
 -- top.vhd
 -- Najwyższy poziom układu.
 --
--- Tryb wybiera sw(0):
---   '0'  sterowanie: bajty z TCP obsługuje ctrl_protocol
---   '1'  test ciągłego przesyłu: do TCP płynie licznik 8-bitowy,
---        odebrane bajty są odrzucane, ctrl_protocol jest w resecie
---
 -- Zwykłe LED-y:
 --   led(0)  puls pracy układu
 --   led(1)  adres IP gotowy
 --   led(2)  klient połączony
---   led(3)  tryb ciągły albo aktywność odbioru z TCP
+--   led(3)  aktywność odbioru z TCP
 --
--- LED-y RGB (led0..led2) pokazują debug_led z ctrl_protocol, bit = kolor.
+-- LED-y RGB led0 i led1 pokazują debug_led z ctrl_protocol, bit = kolor.
+-- led2 i led3 RGB usunięte (do debugu, zakomentowane w XDC).
 --
 -- DAC MCP4822 (offsety kanałów): wysyłany po COMMIT (commit_ok) oraz raz
 -- po resecie, żeby wyjścia dostały wartości z rejestrów.
@@ -40,14 +36,11 @@ entity top is
     port (
         CLK100MHZ : in  std_logic;
         btn       : in  std_logic_vector(3 downto 0);
-        sw        : in  std_logic_vector(3 downto 0);
         led       : out std_logic_vector(3 downto 0);
 
-        -- RGB LED
+        -- RGB LED (led0, led1)
         led0_r, led0_g, led0_b : out std_logic;
         led1_r, led1_g, led1_b : out std_logic;
-        led2_r, led2_g, led2_b : out std_logic;
-        led3_r, led3_g, led3_b : out std_logic;
 
         -- ADC AD9288 (równoległy, 100 MSPS, 2 kanały)
         adc_sel1    : out std_logic;   -- A11, S1
@@ -87,14 +80,13 @@ end entity top;
 
 architecture rtl of top is
 
-    -- Resety i tryb pracy
+    -- Resety
     signal system_reset_n     : std_logic;
-    signal stream_mode        : std_logic;
     signal control_reset      : std_logic;
     signal acquisition_reset  : std_logic;
 
     -- Liczniki pomocnicze
-    signal heartbeat_counter  : unsigned(26 downto 0) := (others => '0');
+    signal heartbeat_counter   : unsigned(26 downto 0) := (others => '0');
     signal rx_activity_counter : unsigned(21 downto 0) := (others => '0');
 
     -- Odczyt pamięci rekordu (control_protocol -> sample_mem), adres słowa
@@ -166,15 +158,10 @@ architecture rtl of top is
     signal control_command_addr  : byte_t;
     signal debug_led_bits        : byte_t;
 
-    -- Test ciągłego przesyłu
-    signal stream_test_data  : std_logic_vector(7 downto 0) := (others => '0');
-    signal stream_test_valid : std_logic := '0';
-
 begin
 
     system_reset_n    <= not btn(0);
-    stream_mode       <= sw(0);
-    control_reset     <= (not system_reset_n) or stream_mode;
+    control_reset     <= not system_reset_n;
     acquisition_reset <= not system_reset_n;
     dac_reset         <= not system_reset_n;
     dac_update        <= dac_boot_kick or control_commit_ok;
@@ -385,29 +372,11 @@ begin
         end if;
     end process p_dac_boot;
 
-    -- Wybór źródła bajtów wysyłanych do TCP
-    tcp_tx_data      <= stream_test_data  when stream_mode = '1' else control_tx_data;
-    tcp_tx_valid     <= stream_test_valid when stream_mode = '1' else control_tx_valid;
-    control_tx_ready <= '0'               when stream_mode = '1' else tcp_tx_ready;
-
-    -- Wybór odbiorcy bajtów z TCP; w trybie ciągłym bajty są odrzucane
-    tcp_rx_ready <= '1' when stream_mode = '1' else control_rx_ready;
-
-    -- Generator licznika dla testu ciągłego przesyłu
-    p_stream_test : process (CLK100MHZ)
-    begin
-        if rising_edge(CLK100MHZ) then
-            if system_reset_n = '0' or stream_mode = '0' or tcp_client_connected = '0' then
-                stream_test_data  <= (others => '0');
-                stream_test_valid <= '0';
-            else
-                stream_test_valid <= '1';
-                if stream_test_valid = '1' and tcp_tx_ready = '1' then
-                    stream_test_data <= std_logic_vector(unsigned(stream_test_data) + 1);
-                end if;
-            end if;
-        end if;
-    end process p_stream_test;
+    -- Bajty z i do TCP idą wprost z ctrl_protocol
+    tcp_tx_data      <= control_tx_data;
+    tcp_tx_valid     <= control_tx_valid;
+    control_tx_ready <= tcp_tx_ready;
+    tcp_rx_ready     <= control_rx_ready;
 
     -- Aktywność odbioru: LED3 świeci przez chwilę po każdym odebranym bajcie
     p_rx_activity : process (CLK100MHZ)
@@ -429,7 +398,7 @@ begin
     led(0) <= heartbeat_counter(26);
     led(1) <= ip_address_ready;
     led(2) <= tcp_client_connected;
-    led(3) <= '1' when (stream_mode = '1') or (rx_activity_counter /= 0) else '0';
+    led(3) <= '1' when rx_activity_counter /= 0 else '0';
 
     -- LED-y RGB: każdy bit debug_led steruje jednym kolorem
     led0_r <= debug_led_bits(0);
@@ -438,11 +407,5 @@ begin
     led1_r <= debug_led_bits(3);
     led1_g <= debug_led_bits(4);
     led1_b <= debug_led_bits(5);
-    led2_r <= debug_led_bits(6);
-    led2_g <= debug_led_bits(7);
-    led2_b <= '0';
-    led3_r <= '0';
-    led3_g <= '0';
-    led3_b <= '0';
 
 end architecture rtl;

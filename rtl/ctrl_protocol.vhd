@@ -19,6 +19,14 @@ use work.regmap_pkg.all;
 -- Mapowanie odczytu: indeks próbki i (0..N-1) -> slot (record_base + i) mod N.
 --   dwa kanały: adres słowa = slot, połówka nieistotna;
 --   jeden kanał: adres słowa = slot / 2, połówka = slot mod 2.
+--
+-- Mapowanie jest liczone kombinacyjnie (p_read_map), a wynik trafia do
+-- rejestru rd_addr_r (p_read_map_reg). Dzięki temu adres pamięci wychodzi
+-- z rejestru, a ścieżka od record_base nie dochodzi do portu RAM.
+--
+-- UWAGA: rejestr dodaje jeden takt między rd_addr (indeks) a rd_data.
+-- measurement_data_tx musi to uwzględniać (czekać takt po ustawieniu indeksu
+-- przed odczytem rd_data). Bez tego odczyt zwróci dane z poprzedniego adresu.
 -- =============================================================================
 
 entity ctrl_protocol is
@@ -91,7 +99,14 @@ architecture rtl of ctrl_protocol is
 
     -- indeks próbki z measurement_data_tx (przed mapowaniem)
     signal record_index   : unsigned(16 downto 0) := (others => '0');
-    -- połówka słowa dla jednego kanału (z mapowania)
+
+    -- mapowanie kombinacyjne i jego rejestr
+    signal rd_addr_next   : unsigned(15 downto 0);
+    signal rd_half_next   : std_logic;
+    signal rd_addr_r      : unsigned(15 downto 0) := (others => '0');
+    signal rd_half_r      : std_logic := '0';
+
+    -- połówka słowa dla jednego kanału (z rejestru)
     signal rd_half        : std_logic := '0';
 
     -- frame_rx -> reg_access
@@ -230,6 +245,7 @@ begin
         );
 
     -- Mapowanie indeksu na slot i adres słowa: slot = (base + indeks) mod N
+    -- (kombinacyjne, wynik trafia do rejestru p_read_map_reg)
     p_read_map : process (record_index, record_base, control_record_length, measurement_channel_mask)
         variable v_sum : integer;
         variable v_n   : integer;
@@ -241,17 +257,29 @@ begin
         end if;
 
         if measurement_channel_mask(1 downto 0) = "11" then
-            rd_addr <= to_unsigned(v_sum, 16);
-            rd_half <= '0';
+            rd_addr_next <= to_unsigned(v_sum, 16);
+            rd_half_next <= '0';
         else
-            rd_addr <= to_unsigned(v_sum / 2, 16);
+            rd_addr_next <= to_unsigned(v_sum / 2, 16);
             if v_sum mod 2 = 1 then
-                rd_half <= '1';
+                rd_half_next <= '1';
             else
-                rd_half <= '0';
+                rd_half_next <= '0';
             end if;
         end if;
     end process p_read_map;
+
+    -- Rejestr adresu odczytu (jeden takt opóźnienia, patrz uwaga w nagłówku)
+    p_read_map_reg : process (clk)
+    begin
+        if rising_edge(clk) then
+            rd_addr_r <= rd_addr_next;
+            rd_half_r <= rd_half_next;
+        end if;
+    end process p_read_map_reg;
+
+    rd_addr <= rd_addr_r;
+    rd_half <= rd_half_r;
 
     -- Sekwencja: READ_RECORD ustawia pending, po odpowiedzi startuje blok,
     -- po bloku active gaśnie
