@@ -42,10 +42,10 @@ set_property -dict { PACKAGE_PIN B11   IOSTANDARD LVCMOS33 } [get_ports { adc_se
 set_property -dict { PACKAGE_PIN A11   IOSTANDARD LVCMOS33 } [get_ports { adc_sel1 }]; #IO_L4N_T0_15 Sch=ja[3]
 set_property -dict { PACKAGE_PIN D12   IOSTANDARD LVCMOS33 } [get_ports { adc_enc_b }]; #IO_L6P_T0_15 Sch=ja[4]
 
-## PGA kanału B - niezaimplementowane (brak w top.vhd), odkomentować przy dodawaniu
-#set_property -dict { PACKAGE_PIN D13   IOSTANDARD LVCMOS33 } [get_ports { pga_b_latch }]; #IO_L6N_T0_VREF_15 Sch=ja[7]
-#set_property -dict { PACKAGE_PIN B18   IOSTANDARD LVCMOS33 } [get_ports { pga_b_data }]; #IO_L10P_T1_AD11P_15 Sch=ja[8]
-#set_property -dict { PACKAGE_PIN A18   IOSTANDARD LVCMOS33 } [get_ports { pga_b_clk }]; #IO_L10N_T1_AD11N_15 Sch=ja[9]
+## PGA kanału B
+set_property -dict { PACKAGE_PIN D13   IOSTANDARD LVCMOS33 } [get_ports { pga_b_latch }]; #IO_L6N_T0_VREF_15 Sch=ja[7]
+set_property -dict { PACKAGE_PIN B18   IOSTANDARD LVCMOS33 } [get_ports { pga_b_data }]; #IO_L10P_T1_AD11P_15 Sch=ja[8]
+set_property -dict { PACKAGE_PIN A18   IOSTANDARD LVCMOS33 } [get_ports { pga_b_clk }]; #IO_L10N_T1_AD11N_15 Sch=ja[9]
 
 ## Pmod JB: adc_b_data
 set_property -dict { PACKAGE_PIN C15   IOSTANDARD LVCMOS33 } [get_ports { adc_b_data[0] }]; #IO_L12N_T1_MRCC_15 Sch=jb_n[2]

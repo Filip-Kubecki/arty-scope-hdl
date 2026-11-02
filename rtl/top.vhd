@@ -21,7 +21,7 @@ use unisim.vcomponents.all;
 -- DAC MCP4822 (offsety kanałów): wysyłany po COMMIT (commit_ok) oraz raz
 -- po resecie, żeby wyjścia dostały wartości z rejestrów.
 --
--- PGA AD8370 (kanał A): słowo wzmocnienia wysyłane po COMMIT oraz raz
+-- PGA AD8370 (kanały A i B): słowa wzmocnienia wysyłane po COMMIT oraz raz
 -- po resecie. PWUP podciągnięty do VCC na płytce.
 --
 -- ADC AD9288 (2 kanały): zegar ENC A i B z ODDR, 100 MHz bez dzielnika
@@ -60,6 +60,11 @@ entity top is
         pga_a_clk   : out std_logic;
         pga_a_data  : out std_logic;
         pga_a_latch : out std_logic;
+
+        -- PGA AD8370, kanał B (PMOD JA: clk A18, data B18, latch D13)
+        pga_b_clk   : out std_logic;
+        pga_b_data  : out std_logic;
+        pga_b_latch : out std_logic;
 
         -- Ethernet MII
         eth_ref_clk : out   std_logic;
@@ -122,6 +127,7 @@ architecture rtl of top is
     signal dac_boot_kick              : std_logic := '0';
     signal dac_boot_pending           : std_logic := '1';
     signal pga_a_update               : std_logic;
+    signal pga_b_update               : std_logic;
 
     -- pozycje w buforze cyklicznym (sloty, 17 bitów)
     signal acquisition_record_base     : unsigned(16 downto 0);
@@ -166,10 +172,11 @@ begin
     dac_reset         <= not system_reset_n;
     dac_update        <= dac_boot_kick or control_commit_ok;
     pga_a_update      <= dac_boot_kick or control_commit_ok;
+    pga_b_update      <= dac_boot_kick or control_commit_ok;
 
     -- ADC AD9288: wybór trybu (S1=1, S2=1, jak w testach)
     adc_sel1  <= '1';
-    adc_sel2  <= '1';
+    adc_sel2  <= '0';
 
     -- zegar kodujący 100 MHz: ODDR z CLK100MHZ, D1='1' na zboczu narastającym,
     -- D2='0' na opadającym -> przebieg o okresie 10 ns
@@ -295,8 +302,8 @@ begin
             clk        => CLK100MHZ,
             rst        => dac_reset,
             update     => dac_update,
-            code_a     => control_offset_a,
-            code_b     => control_offset_b,
+            code_a     => control_offset_b,
+            code_b     => control_offset_a,
             busy       => open,
             dac_cs_n   => dac_cs_n,
             dac_sck    => dac_sck,
@@ -317,6 +324,22 @@ begin
             pga_clk   => pga_a_clk,
             pga_data  => pga_a_data,
             pga_latch => pga_a_latch
+        );
+
+    -- PGA kanału B: słowo z CHANNEL2_GAIN (control_gain_b), aktywne po COMMIT
+    u_pga_b : entity work.ad8370_pga
+        generic map (
+            G_HALF_PERIOD => 5
+        )
+        port map (
+            clk       => CLK100MHZ,
+            rst       => dac_reset,
+            update    => pga_b_update,
+            gain_word => control_gain_b,
+            busy      => open,
+            pga_clk   => pga_b_clk,
+            pga_data  => pga_b_data,
+            pga_latch => pga_b_latch
         );
 
     u_acq : entity work.acquisition_ctrl

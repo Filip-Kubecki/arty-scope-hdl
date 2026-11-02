@@ -35,7 +35,7 @@ use ieee.numeric_std.all;
 entity mcp4822_dac is
     generic (
         G_HALF_PERIOD : positive := 5;      -- takty clk na pół okresu SCK (>= 2)
-        G_GAIN_1X     : boolean  := true    -- true: 1x (0..VREF), false: 2x (0..2*VREF)
+        G_GAIN_1X     : boolean  := false    -- true: 1x (0..VREF), false: 2x (0..2*VREF)
     );
     port (
         clk        : in  std_logic;
