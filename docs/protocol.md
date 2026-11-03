@@ -76,6 +76,7 @@ Lista generowana z `regmap.yaml` (status `implemented`). Opisy uzupełnia się r
 | `0x11` | `ADDR_COMMAND_ARM` | Uzbrojenie akwizycji (IDLE lub READY → ARMED) |
 | `0x12` | `ADDR_COMMAND_STOP` | Zatrzymanie akwizycji, powrót do IDLE |
 | `0x13` | `ADDR_COMMAND_FORCE_TRIGGER` | Ręczne wyzwolenie z ARMED, start zapisu rekordu |
+| `0x14` | `ADDR_COMMAND_CLEAR_FLAGS` | --- |
 | `0x15` | `ADDR_COMMAND_CLEAR_COUNTERS` | Zerowanie liczników protokołu (ramki OK, zły magic, nieznane komendy, zły adres) |
 | `0x16` | `ADDR_COMMAND_RESET_CONFIG` | Wartości domyślne w rejestrach konfiguracji oczekującej |
 | `0x17` | `ADDR_COMMAND_READ_RECORD` | Pobranie gotowego rekordu: odpowiedź i blok danych |
@@ -99,6 +100,12 @@ Lista generowana z `regmap.yaml` (status `implemented`). Opisy uzupełnia się r
 | `0xA1` | `ADDR_ACQUISITION_WRITE_POINTER` | Numer slotu następnego zapisu w buforze cyklicznym, 0 do N−1 (17 bitów) |
 | `0xA2` | `ADDR_ACQUISITION_TRIGGER_POINTER` | Numer slotu próbki wyzwalającej w buforze cyklicznym, zerowany przy ARM (17 bitów) |
 | `0xA4` | `ADDR_ACQUISITION_RECORD_ID` | Numer ostatniego kompletnego rekordu |
+| `0xB0` | `ADDR_CHANNEL1_APPLIED_GAIN` | --- |
+| `0xB1` | `ADDR_CHANNEL1_APPLIED_OFFSET` | --- |
+| `0xB2` | `ADDR_CHANNEL1_FLAGS` | --- |
+| `0xC0` | `ADDR_CHANNEL2_APPLIED_GAIN` | --- |
+| `0xC1` | `ADDR_CHANNEL2_APPLIED_OFFSET` | --- |
+| `0xC2` | `ADDR_CHANNEL2_FLAGS` | --- |
 | `0xF0` | `ADDR_DEBUG_SCRATCH0` | Rejestr roboczy do testu toru |
 | `0xF1` | `ADDR_DEBUG_SCRATCH1` | Rejestr roboczy do testu toru |
 | `0xF2` | `ADDR_DEBUG_LED` | Bity [7:0] sterują diodami RGB na płytce |

@@ -80,6 +80,16 @@ entity ctrl_protocol is
         -- Decymacja (N, 1 = bez decymacji), aktywna po COMMIT
         decimation            : out word_t;
 
+        -- wartości wysłane do układów, flagi sprzętowe i kasowanie flag
+        applied_gain_a_in     : in  byte_t;
+        applied_gain_b_in     : in  byte_t;
+        applied_offset_a_in   : in  std_logic_vector(11 downto 0);
+        applied_offset_b_in   : in  std_logic_vector(11 downto 0);
+        flags_ch1_in          : in  byte_t;
+        flags_ch2_in          : in  byte_t;
+        flags_clear_valid     : out std_logic;
+        flags_clear_mask      : out byte_t;
+
         -- Pozycja początku rekordu w buforze cyklicznym (slot, z acquisition_ctrl)
         record_base           : in  unsigned(16 downto 0);
 
@@ -199,6 +209,14 @@ begin
             active_gain_a               => gain_a,
             active_gain_b               => gain_b,
             active_decimation           => decimation,
+            applied_gain_a_in           => applied_gain_a_in,
+            applied_gain_b_in           => applied_gain_b_in,
+            applied_offset_a_in         => applied_offset_a_in,
+            applied_offset_b_in         => applied_offset_b_in,
+            flags_ch1_in                => flags_ch1_in,
+            flags_ch2_in                => flags_ch2_in,
+            flags_clear_valid           => flags_clear_valid,
+            flags_clear_mask            => flags_clear_mask,
             commit_ok_pulse             => commit_ok,
             acquisition_state           => acquisition_state,
             acquisition_record_id       => acquisition_record_id,

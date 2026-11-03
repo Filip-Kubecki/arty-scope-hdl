@@ -19,7 +19,7 @@ package regmap_pkg is
     constant RECORD_TYPE_DATA : byte_t := x"D0";  -- Typ bloku danych
     constant RECORD_HEADER_LENGTH : natural := 64;  -- Długość nagłówka w bajtach
     constant RECORD_SAMPLE_BITS : natural := 8;  -- Bity na próbkę (obecnie)
-    constant RECORD_MAX_SAMPLES : natural := 65536;  -- Maksymalna liczba próbek na kanał w rekordzie
+    constant RECORD_MAX_SAMPLES : natural := 32768;  -- Pojemność pamięci w słowach (2^15): dwa kanały 32768 próbek na kanał, jeden kanał 65536
     constant ZONE_ID_LO : byte_t := x"00";  -- Tożsamość, początek
     constant ZONE_ID_HI : byte_t := x"0F";  -- Tożsamość, koniec
     constant ZONE_COMMAND_LO : byte_t := x"10";  -- Komendy, początek
@@ -53,7 +53,7 @@ package regmap_pkg is
     constant ADDR_COMMAND_ARM : byte_t := x"11";  -- implemented: Uzbrojenie akwizycji
     constant ADDR_COMMAND_STOP : byte_t := x"12";  -- implemented: Zatrzymanie akwizycji, powrót do IDLE
     constant ADDR_COMMAND_FORCE_TRIGGER : byte_t := x"13";  -- implemented: Ręczne wyzwolenie z ARMED
-    constant ADDR_COMMAND_CLEAR_FLAGS : byte_t := x"14";  -- accepted: Kasowanie flag, dane = maska (dziś bez efektu)
+    constant ADDR_COMMAND_CLEAR_FLAGS : byte_t := x"14";  -- implemented: Kasowanie flag: dane = maska bitów do wyczyszczenia (bit 0 kanał 1, bit 1 kanał 2)
     constant ADDR_COMMAND_CLEAR_COUNTERS : byte_t := x"15";  -- implemented: Zerowanie liczników
     constant ADDR_COMMAND_RESET_CONFIG : byte_t := x"16";  -- implemented: Wartości domyślne w rejestrach oczekujących (dziś bez efektu)
     constant ADDR_COMMAND_READ_RECORD : byte_t := x"17";  -- implemented: Wysłanie ostatniego kompletnego rekordu
@@ -86,12 +86,12 @@ package regmap_pkg is
     constant ADDR_ACQUISITION_TRIGGER_POINTER : byte_t := x"A2";  -- implemented: Indeks próbki, w której nastąpiło wyzwolenie
     constant ADDR_ACQUISITION_SAMPLES : byte_t := x"A3";  -- planned: Zebrane próbki na kanał
     constant ADDR_ACQUISITION_RECORD_ID : byte_t := x"A4";  -- implemented: Numer ostatniego kompletnego rekordu
-    constant ADDR_CHANNEL1_APPLIED_GAIN : byte_t := x"B0";  -- planned: Wzmocnienie aktywne, kanał 1
-    constant ADDR_CHANNEL1_APPLIED_OFFSET : byte_t := x"B1";  -- planned: Offset aktywny, kanał 1
-    constant ADDR_CHANNEL1_FLAGS : byte_t := x"B2";  -- planned: Przesterowanie ADC (lepkie), zajętość SPI (chwilowa), kanał 1
-    constant ADDR_CHANNEL2_APPLIED_GAIN : byte_t := x"C0";  -- planned: Wzmocnienie aktywne, kanał 2
-    constant ADDR_CHANNEL2_APPLIED_OFFSET : byte_t := x"C1";  -- planned: Offset aktywny, kanał 2
-    constant ADDR_CHANNEL2_FLAGS : byte_t := x"C2";  -- planned: Przesterowanie ADC (lepkie), zajętość SPI (chwilowa), kanał 2
+    constant ADDR_CHANNEL1_APPLIED_GAIN : byte_t := x"B0";  -- implemented: Słowo wzmocnienia wysłane do PGA A (ostatnio przyjęte przez sterownik), kanał 1
+    constant ADDR_CHANNEL1_APPLIED_OFFSET : byte_t := x"B1";  -- implemented: Kod DAC wysłany dla kanału 1 (12 bitów, ostatnio przyjęty przez sterownik)
+    constant ADDR_CHANNEL1_FLAGS : byte_t := x"B2";  -- implemented: Bit 0: przesterowanie ADC (lepkie, kasowane przez 0x14), bit 1: PGA zajęte (chwilowo), bit 2: DAC zajęty (chwilowo), kanał 1
+    constant ADDR_CHANNEL2_APPLIED_GAIN : byte_t := x"C0";  -- implemented: Słowo wzmocnienia wysłane do PGA B (ostatnio przyjęte przez sterownik), kanał 2
+    constant ADDR_CHANNEL2_APPLIED_OFFSET : byte_t := x"C1";  -- implemented: Kod DAC wysłany dla kanału 2 (12 bitów, ostatnio przyjęty przez sterownik)
+    constant ADDR_CHANNEL2_FLAGS : byte_t := x"C2";  -- implemented: Bit 0: przesterowanie ADC (lepkie, kasowane przez 0x14), bit 1: PGA zajęte (chwilowo), bit 2: DAC zajęty (chwilowo), kanał 2
     constant ADDR_DEBUG_SCRATCH0 : byte_t := x"F0";  -- implemented: Rejestr roboczy, pierwszy test protokołu
     constant ADDR_DEBUG_SCRATCH1 : byte_t := x"F1";  -- implemented: Rejestr roboczy
     constant ADDR_DEBUG_LED : byte_t := x"F2";  -- implemented: Bity [7:0] sterują diodami na płytce

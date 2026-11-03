@@ -91,6 +91,18 @@ entity reg_access is
         active_gain_a             : out byte_t;
         active_gain_b             : out byte_t;
         active_decimation         : out word_t;
+
+        -- wartości wysłane do układów i flagi sprzętowe (tylko odczyt)
+        applied_gain_a_in         : in  byte_t;
+        applied_gain_b_in         : in  byte_t;
+        applied_offset_a_in       : in  std_logic_vector(11 downto 0);
+        applied_offset_b_in       : in  std_logic_vector(11 downto 0);
+        flags_ch1_in              : in  byte_t;
+        flags_ch2_in              : in  byte_t;
+
+        -- kasowanie flag: impuls i maska z zapisu 0x14
+        flags_clear_valid         : out std_logic;
+        flags_clear_mask          : out byte_t;
         commit_ok_pulse           : out std_logic;
 
         -- stan akwizycji
@@ -180,6 +192,8 @@ architecture rtl of reg_access is
     signal cmd_valid_r      : std_logic := '0';
     signal cmd_addr_r       : byte_t    := (others => '0');
     signal record_req_r     : std_logic := '0';
+    signal flags_clear_valid_r : std_logic := '0';
+    signal flags_clear_mask_r  : byte_t    := (others => '0');
 
 begin
 
@@ -190,6 +204,8 @@ begin
     cmd_valid                 <= cmd_valid_r;
     cmd_addr                  <= cmd_addr_r;
     record_req                <= record_req_r;
+    flags_clear_valid         <= flags_clear_valid_r;
+    flags_clear_mask          <= flags_clear_mask_r;
     active_record_length      <= active_record_length_r;
     active_channel_mask       <= active_channel_mask_r;
     active_pre_length         <= active_pre_length_r;
@@ -217,6 +233,7 @@ begin
             cmd_valid_r      <= '0';
             record_req_r     <= '0';
             commit_ok_r      <= '0';
+            flags_clear_valid_r <= '0';
 
             -- zdarzenia z parsera ramek zwiększają liczniki niezależnie od żądania
             if frame_ok_pulse = '1' then
@@ -393,7 +410,13 @@ begin
                           or request_addr = ADDR_COUNTER_FRAMES_OK
                           or request_addr = ADDR_COUNTER_BAD_MAGIC
                           or request_addr = ADDR_COUNTER_UNKNOWN_COMMAND
-                          or request_addr = ADDR_COUNTER_BAD_ADDRESS then
+                          or request_addr = ADDR_COUNTER_BAD_ADDRESS
+                          or request_addr = ADDR_CHANNEL1_APPLIED_GAIN
+                          or request_addr = ADDR_CHANNEL1_APPLIED_OFFSET
+                          or request_addr = ADDR_CHANNEL1_FLAGS
+                          or request_addr = ADDR_CHANNEL2_APPLIED_GAIN
+                          or request_addr = ADDR_CHANNEL2_APPLIED_OFFSET
+                          or request_addr = ADDR_CHANNEL2_FLAGS then
                         v_err  := true;
                         v_code := ERROR_READ_ONLY;
 
@@ -462,6 +485,12 @@ begin
                         counter_unknown_command <= (others => '0');
                         counter_bad_address     <= (others => '0');
                         v_data                  := (others => '0');
+
+                    -- kasowanie flag: maska z danych, bez cmd_valid
+                    elsif request_addr = ADDR_COMMAND_CLEAR_FLAGS then
+                        flags_clear_valid_r <= '1';
+                        flags_clear_mask_r  <= request_data(7 downto 0);
+                        v_data              := (others => '0');
 
                     -- pozostałe komendy strefy 0x10-0x17
                     elsif v_addr >= 16 and v_addr <= 23 then
@@ -545,6 +574,26 @@ begin
 
                     elsif request_addr = ADDR_COUNTER_BAD_ADDRESS then
                         v_data := std_logic_vector(counter_bad_address);
+
+                    elsif request_addr = ADDR_CHANNEL1_APPLIED_GAIN then
+                        v_data := x"000000" & applied_gain_a_in;
+
+                    elsif request_addr = ADDR_CHANNEL1_APPLIED_OFFSET then
+                        v_data := (others => '0');
+                        v_data(11 downto 0) := applied_offset_a_in;
+
+                    elsif request_addr = ADDR_CHANNEL1_FLAGS then
+                        v_data := x"000000" & flags_ch1_in;
+
+                    elsif request_addr = ADDR_CHANNEL2_APPLIED_GAIN then
+                        v_data := x"000000" & applied_gain_b_in;
+
+                    elsif request_addr = ADDR_CHANNEL2_APPLIED_OFFSET then
+                        v_data := (others => '0');
+                        v_data(11 downto 0) := applied_offset_b_in;
+
+                    elsif request_addr = ADDR_CHANNEL2_FLAGS then
+                        v_data := x"000000" & flags_ch2_in;
 
                     elsif request_addr = ADDR_DEBUG_SCRATCH0 then
                         v_data := debug_scratch0_r;

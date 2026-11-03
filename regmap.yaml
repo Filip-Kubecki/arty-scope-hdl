@@ -33,7 +33,7 @@ protocol_constants:
   - {name: RECORD_TYPE_DATA,     type: byte,    value: 0xD0, desc: "Typ bloku danych"}
   - {name: RECORD_HEADER_LENGTH, type: natural, value: 64,   desc: "Długość nagłówka w bajtach"}
   - {name: RECORD_SAMPLE_BITS,   type: natural, value: 8,    desc: "Bity na próbkę (obecnie)"}
-  - {name: RECORD_MAX_SAMPLES,   type: natural, value: 65536, desc: "Maksymalna liczba próbek na kanał w rekordzie"}
+  - {name: RECORD_MAX_SAMPLES,   type: natural, value: 32768, desc: "Pojemność pamięci w słowach (2^15): dwa kanały 32768 próbek na kanał, jeden kanał 65536"}
 
   # Strefy adresów (dekoder sprawdza górne bity)
   - {name: ZONE_ID_LO,           type: byte,    value: 0x00, desc: "Tożsamość, początek"}
@@ -76,7 +76,7 @@ registers:
   - {name: COMMAND_ARM,               address: 0x11, access: wo,                   status: implemented, desc: "Uzbrojenie akwizycji"}
   - {name: COMMAND_STOP,              address: 0x12, access: wo,                   status: implemented, desc: "Zatrzymanie akwizycji, powrót do IDLE"}
   - {name: COMMAND_FORCE_TRIGGER,     address: 0x13, access: wo,                   status: implemented, desc: "Ręczne wyzwolenie z ARMED"}
-  - {name: COMMAND_CLEAR_FLAGS,        address: 0x14, access: wo,                   status: accepted,    desc: "Kasowanie flag, dane = maska (dziś bez efektu)"}
+  - {name: COMMAND_CLEAR_FLAGS,        address: 0x14, access: wo,                   status: implemented, desc: "Kasowanie flag: dane = maska bitów do wyczyszczenia (bit 0 kanał 1, bit 1 kanał 2)"}
   - {name: COMMAND_CLEAR_COUNTERS,     address: 0x15, access: wo,                   status: implemented,    desc: "Zerowanie liczników"}
   - {name: COMMAND_RESET_CONFIG,      address: 0x16, access: wo,                   status: implemented,    desc: "Wartości domyślne w rejestrach oczekujących (dziś bez efektu)"}
   - {name: COMMAND_READ_RECORD,       address: 0x17, access: wo,                   status: implemented, desc: "Wysłanie ostatniego kompletnego rekordu"}
@@ -123,12 +123,12 @@ registers:
   - {name: ACQUISITION_SAMPLES,       address: 0xA3, access: ro,                   status: planned,     desc: "Zebrane próbki na kanał"}
   - {name: ACQUISITION_RECORD_ID,     address: 0xA4, access: ro,                   status: implemented, desc: "Numer ostatniego kompletnego rekordu"}
 
-  - {name: CHANNEL1_APPLIED_GAIN,     address: 0xB0, access: ro,                   status: planned,     desc: "Wzmocnienie aktywne, kanał 1"}
-  - {name: CHANNEL1_APPLIED_OFFSET,   address: 0xB1, access: ro,                   status: planned,     desc: "Offset aktywny, kanał 1"}
-  - {name: CHANNEL1_FLAGS,            address: 0xB2, access: ro,                   status: planned,     desc: "Przesterowanie ADC (lepkie), zajętość SPI (chwilowa), kanał 1"}
-  - {name: CHANNEL2_APPLIED_GAIN,     address: 0xC0, access: ro,                   status: planned,     desc: "Wzmocnienie aktywne, kanał 2"}
-  - {name: CHANNEL2_APPLIED_OFFSET,   address: 0xC1, access: ro,                   status: planned,     desc: "Offset aktywny, kanał 2"}
-  - {name: CHANNEL2_FLAGS,            address: 0xC2, access: ro,                   status: planned,     desc: "Przesterowanie ADC (lepkie), zajętość SPI (chwilowa), kanał 2"}
+  - {name: CHANNEL1_APPLIED_GAIN,     address: 0xB0, access: ro,                   status: implemented, desc: "Słowo wzmocnienia wysłane do PGA A (ostatnio przyjęte przez sterownik), kanał 1"}
+  - {name: CHANNEL1_APPLIED_OFFSET,   address: 0xB1, access: ro,                   status: implemented, desc: "Kod DAC wysłany dla kanału 1 (12 bitów, ostatnio przyjęty przez sterownik)"}
+  - {name: CHANNEL1_FLAGS,            address: 0xB2, access: ro,                   status: implemented, desc: "Bit 0: przesterowanie ADC (lepkie, kasowane przez 0x14), bit 1: PGA zajęte (chwilowo), bit 2: DAC zajęty (chwilowo), kanał 1"}
+  - {name: CHANNEL2_APPLIED_GAIN,     address: 0xC0, access: ro,                   status: implemented, desc: "Słowo wzmocnienia wysłane do PGA B (ostatnio przyjęte przez sterownik), kanał 2"}
+  - {name: CHANNEL2_APPLIED_OFFSET,   address: 0xC1, access: ro,                   status: implemented, desc: "Kod DAC wysłany dla kanału 2 (12 bitów, ostatnio przyjęty przez sterownik)"}
+  - {name: CHANNEL2_FLAGS,            address: 0xC2, access: ro,                   status: implemented, desc: "Bit 0: przesterowanie ADC (lepkie, kasowane przez 0x14), bit 1: PGA zajęte (chwilowo), bit 2: DAC zajęty (chwilowo), kanał 2"}
 
   # -------------------------------------------------------------------------
   # Debug (do usunięcia w wersji końcowej)

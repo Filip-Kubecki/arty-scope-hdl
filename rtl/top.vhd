@@ -151,6 +151,21 @@ architecture rtl of top is
     signal control_decimation : word_t;                                  -- z rejestru ACQUISITION_DECIMATION
     signal decim_n           : unsigned(15 downto 0);                    -- 1 = bez decymacji
     signal dec_valid        : std_logic;
+
+    -- wartości wysłane do układów (rejestry APPLIED), flagi i sprzętowe wyjścia busy
+    signal applied_gain_a_r   : byte_t := (others => '0');
+    signal applied_gain_b_r   : byte_t := (others => '0');
+    signal applied_offset_a_r : std_logic_vector(11 downto 0) := x"800";
+    signal applied_offset_b_r : std_logic_vector(11 downto 0) := x"800";
+    signal sat_ch1_r          : std_logic := '0';
+    signal sat_ch2_r          : std_logic := '0';
+    signal dac_busy           : std_logic;
+    signal pga_a_busy         : std_logic;
+    signal pga_b_busy         : std_logic;
+    signal flags_ch1          : byte_t;
+    signal flags_ch2          : byte_t;
+    signal flags_clear_valid  : std_logic;
+    signal flags_clear_mask   : byte_t;
     signal dec_ch1          : byte_t;
     signal dec_ch2          : byte_t;
 
@@ -183,6 +198,55 @@ begin
     pga_a_update      <= dac_boot_kick or control_commit_ok;
     pga_b_update      <= dac_boot_kick or control_commit_ok;
     decim_n           <= unsigned(control_decimation(15 downto 0));
+
+    -- flagi: bit 0 przesterowanie ADC (lepkie), bit 1 PGA zajęte, bit 2 DAC zajęty
+    flags_ch1 <= "00000" & dac_busy & pga_a_busy & sat_ch1_r;
+    flags_ch2 <= "00000" & dac_busy & pga_b_busy & sat_ch2_r;
+
+    -- APPLIED: kopia wartości przyjętej przez sterownik w chwili update;
+    -- przesterowanie: kody 0x00 i 0xFF na wejściu ADC (tylko podczas akwizycji)
+    p_applied : process (CLK100MHZ)
+    begin
+        if rising_edge(CLK100MHZ) then
+            if system_reset_n = '0' then
+                applied_gain_a_r   <= (others => '0');
+                applied_gain_b_r   <= (others => '0');
+                applied_offset_a_r <= x"800";
+                applied_offset_b_r <= x"800";
+                sat_ch1_r          <= '0';
+                sat_ch2_r          <= '0';
+            else
+                if pga_a_update = '1' then
+                    applied_gain_a_r <= control_gain_a;
+                end if;
+                if pga_b_update = '1' then
+                    applied_gain_b_r <= control_gain_b;
+                end if;
+                if dac_update = '1' then
+                    applied_offset_a_r <= control_offset_a;
+                    applied_offset_b_r <= control_offset_b;
+                end if;
+
+                if adc_sample_valid = '1' then
+                    if adc_ch1 = x"00" or adc_ch1 = x"FF" then
+                        sat_ch1_r <= '1';
+                    end if;
+                    if adc_ch2 = x"00" or adc_ch2 = x"FF" then
+                        sat_ch2_r <= '1';
+                    end if;
+                end if;
+
+                if flags_clear_valid = '1' then
+                    if flags_clear_mask(0) = '1' then
+                        sat_ch1_r <= '0';
+                    end if;
+                    if flags_clear_mask(1) = '1' then
+                        sat_ch2_r <= '0';
+                    end if;
+                end if;
+            end if;
+        end if;
+    end process p_applied;
 
     -- ADC AD9288: wybór trybu (S1=1, S2=0, tryb normalny wg noty)
     adc_sel1  <= '1';
@@ -288,6 +352,14 @@ begin
             gain_a                      => control_gain_a,
             gain_b                      => control_gain_b,
             decimation                  => control_decimation,
+            applied_gain_a_in           => applied_gain_a_r,
+            applied_gain_b_in           => applied_gain_b_r,
+            applied_offset_a_in         => applied_offset_a_r,
+            applied_offset_b_in         => applied_offset_b_r,
+            flags_ch1_in                => flags_ch1,
+            flags_ch2_in                => flags_ch2,
+            flags_clear_valid           => flags_clear_valid,
+            flags_clear_mask            => flags_clear_mask,
             record_base                 => acquisition_record_base,
             rd_addr                     => control_read_address,
             rd_data                     => memory_read_data
@@ -329,7 +401,7 @@ begin
             update     => dac_update,
             code_a     => control_offset_b,
             code_b     => control_offset_a,
-            busy       => open,
+            busy       => dac_busy,
             dac_cs_n   => dac_cs_n,
             dac_sck    => dac_sck,
             dac_sdi    => dac_sdi,
@@ -345,7 +417,7 @@ begin
             rst       => dac_reset,
             update    => pga_a_update,
             gain_word => control_gain_a,
-            busy      => open,
+            busy      => pga_a_busy,
             pga_clk   => pga_a_clk,
             pga_data  => pga_a_data,
             pga_latch => pga_a_latch
@@ -361,7 +433,7 @@ begin
             rst       => dac_reset,
             update    => pga_b_update,
             gain_word => control_gain_b,
-            busy      => open,
+            busy      => pga_b_busy,
             pga_clk   => pga_b_clk,
             pga_data  => pga_b_data,
             pga_latch => pga_b_latch
