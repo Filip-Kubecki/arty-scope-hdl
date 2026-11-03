@@ -90,6 +90,7 @@ entity reg_access is
         active_offset_b           : out std_logic_vector(11 downto 0);
         active_gain_a             : out byte_t;
         active_gain_b             : out byte_t;
+        active_decimation         : out word_t;
         commit_ok_pulse           : out std_logic;
 
         -- stan akwizycji
@@ -118,6 +119,7 @@ architecture rtl of reg_access is
     constant DEFAULT_TRIG_HYST     : byte_t := x"00";
     constant DEFAULT_OFFSET        : std_logic_vector(11 downto 0) := x"800";  -- środek skali
     constant DEFAULT_GAIN          : byte_t := x"00";                          -- AD8370 po resecie: LG0
+    constant DEFAULT_DECIMATION    : word_t := x"00000001";                    -- 1 = bez decymacji
 
     -- Maksymalna długość rekordu dla danej maski kanałów.
     -- Jeden kanał zajmuje pół słowa, więc mieści się dwa razy więcej próbek.
@@ -147,6 +149,7 @@ architecture rtl of reg_access is
     signal pending_offset_b           : std_logic_vector(11 downto 0) := DEFAULT_OFFSET;
     signal pending_gain_a             : byte_t := DEFAULT_GAIN;
     signal pending_gain_b             : byte_t := DEFAULT_GAIN;
+    signal pending_decimation         : word_t := DEFAULT_DECIMATION;
 
     -- Konfiguracja: kopia aktywna
     signal active_record_length_r      : word_t := DEFAULT_RECORD_LENGTH;
@@ -160,6 +163,7 @@ architecture rtl of reg_access is
     signal active_offset_b_r           : std_logic_vector(11 downto 0) := DEFAULT_OFFSET;
     signal active_gain_a_r             : byte_t := DEFAULT_GAIN;
     signal active_gain_b_r             : byte_t := DEFAULT_GAIN;
+    signal active_decimation_r         : word_t := DEFAULT_DECIMATION;
     signal commit_ok_r                 : std_logic := '0';
 
     -- Liczniki protokołu
@@ -197,6 +201,7 @@ begin
     active_offset_b           <= active_offset_b_r;
     active_gain_a             <= active_gain_a_r;
     active_gain_b             <= active_gain_b_r;
+    active_decimation         <= active_decimation_r;
     commit_ok_pulse           <= commit_ok_r;
     debug_led                 <= debug_led_r(7 downto 0);
 
@@ -247,6 +252,8 @@ begin
                 active_offset_b_r             <= DEFAULT_OFFSET;
                 active_gain_a_r               <= DEFAULT_GAIN;
                 active_gain_b_r               <= DEFAULT_GAIN;
+                pending_decimation            <= DEFAULT_DECIMATION;
+                active_decimation_r           <= DEFAULT_DECIMATION;
                 counter_frames_ok             <= (others => '0');
                 counter_bad_magic             <= (others => '0');
                 counter_unknown_command       <= (others => '0');
@@ -366,6 +373,16 @@ begin
                             v_code := ERROR_BAD_VALUE;
                         end if;
 
+                    -- decymacja: 1..65535 (0 niepoprawne, bo decymator traktuje je jak 1)
+                    elsif request_addr = ADDR_ACQUISITION_DECIMATION then
+                        if unsigned(request_data) >= 1 and unsigned(request_data) <= 65535 then
+                            pending_decimation <= request_data;
+                            v_data             := request_data;
+                        else
+                            v_err  := true;
+                            v_code := ERROR_BAD_VALUE;
+                        end if;
+
                     -- rejestry tylko do odczytu
                     elsif request_addr = ADDR_DEVICE_ID or request_addr = ADDR_PROTOCOL_VERSION
                           or request_addr = ADDR_DEBUG_CONST
@@ -417,6 +434,7 @@ begin
                             active_offset_b_r           <= pending_offset_b;
                             active_gain_a_r             <= pending_gain_a;
                             active_gain_b_r             <= pending_gain_b;
+                            active_decimation_r         <= pending_decimation;
                             commit_ok_r                 <= '1';
                             v_data                      := (others => '0');
                         end if;
@@ -434,6 +452,7 @@ begin
                         pending_offset_b           <= DEFAULT_OFFSET;
                         pending_gain_a             <= DEFAULT_GAIN;
                         pending_gain_b             <= DEFAULT_GAIN;
+                        pending_decimation         <= DEFAULT_DECIMATION;
                         v_data                     := (others => '0');
 
                     -- czyszczenie liczników: obsługiwane tutaj, bez cmd_valid
@@ -471,6 +490,9 @@ begin
 
                     elsif request_addr = ADDR_ACQUISITION_PRETRIGGER then
                         v_data := pending_pre_length;
+
+                    elsif request_addr = ADDR_ACQUISITION_DECIMATION then
+                        v_data := pending_decimation;
 
                     elsif request_addr = ADDR_TRIGGER_SOURCE then
                         v_data := x"000000" & pending_trigger_source;

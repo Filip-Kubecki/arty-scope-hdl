@@ -25,9 +25,11 @@ use unisim.vcomponents.all;
 -- po resecie. PWUP podciągnięty do VCC na płytce.
 --
 -- ADC AD9288 (2 kanały): zegar ENC A i B z ODDR, 100 MHz bez dzielnika
--- (D1='1', D2='0' na CLK100MHZ). Wybór trybu: S1=1, S2=1 (działa w testach;
--- tryb normalny według noty to S1=1, S2=0 - do sprawdzenia).
+-- (D1='1', D2='0' na CLK100MHZ). Wybór trybu: S1=1, S2=0 (tryb normalny wg noty).
 -- Półokres 5 ns jest na granicy minimalnej szerokości impulsu w nocie (4,3 ns).
+--
+-- Decymacja: sample_decimator (przepuszcza co N-tą próbkę) między przetwornikiem
+-- a acquisition_ctrl. decim_n = 1 (bez decymacji), do podpięcia pod rejestr.
 --
 -- BTN0 resetuje układ.
 -- =============================================================================
@@ -145,6 +147,13 @@ architecture rtl of top is
     signal adc_ch1          : byte_t;
     signal adc_ch2          : byte_t;
 
+    -- decymacja (sample_decimator -> acquisition_ctrl)
+    signal control_decimation : word_t;                                  -- z rejestru ACQUISITION_DECIMATION
+    signal decim_n           : unsigned(15 downto 0);                    -- 1 = bez decymacji
+    signal dec_valid        : std_logic;
+    signal dec_ch1          : byte_t;
+    signal dec_ch2          : byte_t;
+
     -- TCP (fc1002_mii_tcp_link)
     signal tcp_rx_data          : std_logic_vector(7 downto 0);
     signal tcp_rx_valid         : std_logic;
@@ -173,8 +182,9 @@ begin
     dac_update        <= dac_boot_kick or control_commit_ok;
     pga_a_update      <= dac_boot_kick or control_commit_ok;
     pga_b_update      <= dac_boot_kick or control_commit_ok;
+    decim_n           <= unsigned(control_decimation(15 downto 0));
 
-    -- ADC AD9288: wybór trybu (S1=1, S2=1, jak w testach)
+    -- ADC AD9288: wybór trybu (S1=1, S2=0, tryb normalny wg noty)
     adc_sel1  <= '1';
     adc_sel2  <= '0';
 
@@ -277,6 +287,7 @@ begin
             commit_ok                   => control_commit_ok,
             gain_a                      => control_gain_a,
             gain_b                      => control_gain_b,
+            decimation                  => control_decimation,
             record_base                 => acquisition_record_base,
             rd_addr                     => control_read_address,
             rd_data                     => memory_read_data
@@ -291,6 +302,20 @@ begin
             sample_valid => adc_sample_valid,
             ch1          => adc_ch1,
             ch2          => adc_ch2
+        );
+
+    -- Decymacja między przetwornikiem a akwizycją (co N-ta próbka)
+    u_decim : entity work.sample_decimator
+        port map (
+            clk              => CLK100MHZ,
+            rst              => acquisition_reset,
+            decimation       => decim_n,
+            sample_valid_in  => adc_sample_valid,
+            ch1_in           => adc_ch1,
+            ch2_in           => adc_ch2,
+            sample_valid_out => dec_valid,
+            ch1_out          => dec_ch1,
+            ch2_out          => dec_ch2
         );
 
     u_dac : entity work.mcp4822_dac
@@ -342,15 +367,16 @@ begin
             pga_latch => pga_b_latch
         );
 
+    -- acquisition_ctrl dostaje próbki po decymacji (strob dec_valid)
     u_acq : entity work.acquisition_ctrl
         port map (
             clk                => CLK100MHZ,
             rst                => acquisition_reset,
             cmd_valid          => control_command_valid,
             cmd_addr           => control_command_addr,
-            sample_valid       => adc_sample_valid,
-            ch1                => adc_ch1,
-            ch2                => adc_ch2,
+            sample_valid       => dec_valid,
+            ch1                => dec_ch1,
+            ch2                => dec_ch2,
             record_length      => control_record_length,
             pre_length         => control_pre_length,
             channel_mask       => control_channel_mask,

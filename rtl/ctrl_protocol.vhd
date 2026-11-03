@@ -77,6 +77,9 @@ entity ctrl_protocol is
         gain_a                : out byte_t;
         gain_b                : out byte_t;
 
+        -- Decymacja (N, 1 = bez decymacji), aktywna po COMMIT
+        decimation            : out word_t;
+
         -- Pozycja początku rekordu w buforze cyklicznym (slot, z acquisition_ctrl)
         record_base           : in  unsigned(16 downto 0);
 
@@ -195,6 +198,7 @@ begin
             active_offset_b             => offset_b,
             active_gain_a               => gain_a,
             active_gain_b               => gain_b,
+            active_decimation           => decimation,
             commit_ok_pulse             => commit_ok,
             acquisition_state           => acquisition_state,
             acquisition_record_id       => acquisition_record_id,
