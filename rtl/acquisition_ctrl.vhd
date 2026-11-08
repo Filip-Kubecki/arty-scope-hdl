@@ -42,6 +42,9 @@ use work.regmap_pkg.all;
 -- =============================================================================
 
 entity acquisition_ctrl is
+    generic (
+        G_AUTO_TIMEOUT     : natural := 50000000   -- tryb AUTO: 0,5 s w ARMED przy 100 MHz
+    );
     port (
         clk                : in  std_logic;
         rst                : in  std_logic;
@@ -63,6 +66,11 @@ entity acquisition_ctrl is
         trigger_edge       : in  byte_t;   -- 0x00 narastająca, 0x01 opadająca, 0x02 obie
         trigger_level      : in  byte_t;   -- poziom w kodach ADC
         trigger_hysteresis : in  byte_t;   -- pasmo histerezy w kodach ADC
+
+        -- tryb wyzwalania: 0x00 AUTO, 0x01 NORMAL, 0x02 SINGLE
+        acq_mode           : in  byte_t;
+        -- impuls: rekord w READY został odczytany (ponowne uzbrojenie w AUTO/NORMAL)
+        record_consumed    : in  std_logic;
 
         -- sterowanie przetwornikiem i pamięcią
         enable             : out std_logic;
@@ -93,6 +101,10 @@ architecture rtl of acquisition_ctrl is
 
     constant SOURCE_CH1 : byte_t := x"00";
 
+    constant MODE_AUTO   : byte_t := x"00";
+    constant MODE_NORMAL : byte_t := x"01";
+    constant MODE_SINGLE : byte_t := x"02";
+
     signal st           : byte_t := ST_IDLE;
     signal wr_addr_r    : unsigned(16 downto 0) := (others => '0');   -- slot zapisu
     signal rec_id_r     : unsigned(31 downto 0) := (others => '0');
@@ -103,6 +115,8 @@ architecture rtl of acquisition_ctrl is
     signal low_armed_r  : std_logic := '0';   -- uzbrojenie krawędzi narastającej
     signal high_armed_r : std_logic := '0';   -- uzbrojenie krawędzi opadającej
     signal force_r      : std_logic := '0';   -- FORCE_TRIGGER oczekuje na pre
+    signal timeout_r    : unsigned(31 downto 0) := (others => '0');  -- takty w ARMED (AUTO)
+    signal timeout_hit  : boolean;
 
     -- wybrana próbka do porównania z poziomem
     signal trig_sample  : byte_t;
@@ -116,6 +130,7 @@ begin
     trig_sample <= ch1 when trigger_source = SOURCE_CH1 else ch2;
     dual_mode   <= '1' when channel_mask(1 downto 0) = "11" else '0';
     sel_sample  <= ch2 when channel_mask(1 downto 0) = "10" else ch1;
+    timeout_hit <= (timeout_r >= to_unsigned(G_AUTO_TIMEOUT, 32));
 
     state           <= st;
     record_id       <= std_logic_vector(rec_id_r);
@@ -160,6 +175,24 @@ begin
                 v_n    := to_integer(unsigned(record_length));
                 v_pre  := to_integer(unsigned(pre_length));
                 v_post := v_n - v_pre;
+
+                -- licznik czasu w ARMED (tryb AUTO)
+                if st = ST_ARMED then
+                    timeout_r <= timeout_r + 1;
+                else
+                    timeout_r <= (others => '0');
+                end if;
+
+                -- ponowne uzbrojenie po odczycie rekordu (tryby AUTO i NORMAL)
+                if st = ST_READY and acq_mode /= MODE_SINGLE and record_consumed = '1' then
+                    st           <= ST_ARMED;
+                    wr_addr_r    <= (others => '0');
+                    filled_r     <= (others => '0');
+                    trig_addr_r  <= (others => '0');
+                    low_armed_r  <= '0';
+                    high_armed_r <= '0';
+                    force_r      <= '0';
+                end if;
 
                 -- komendy
                 if cmd_valid = '1' then
@@ -217,7 +250,7 @@ begin
                     -- decyzja o wyzwoleniu (po zebraniu pre próbek)
                     v_trig := false;
                     if filled_r >= to_unsigned(v_pre, 32) then
-                        if force_r = '1' then
+                        if force_r = '1' or (acq_mode = MODE_AUTO and timeout_hit) then
                             v_trig := true;
                         elsif (trigger_edge = EDGE_RISING or trigger_edge = EDGE_BOTH)
                               and low_armed_r = '1' and v_sample >= v_level then

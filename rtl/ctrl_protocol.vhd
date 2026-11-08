@@ -90,6 +90,10 @@ entity ctrl_protocol is
         flags_clear_valid     : out std_logic;
         flags_clear_mask      : out byte_t;
 
+        -- tryb wyzwalania (aktywny) i impuls po odczycie rekordu
+        acq_mode_out          : out byte_t;
+        record_consumed       : out std_logic;
+
         -- Pozycja początku rekordu w buforze cyklicznym (slot, z acquisition_ctrl)
         record_base           : in  unsigned(16 downto 0);
 
@@ -217,6 +221,7 @@ begin
             flags_ch2_in                => flags_ch2_in,
             flags_clear_valid           => flags_clear_valid,
             flags_clear_mask            => flags_clear_mask,
+            active_acq_mode             => acq_mode_out,
             commit_ok_pulse             => commit_ok,
             acquisition_state           => acquisition_state,
             acquisition_record_id       => acquisition_record_id,
@@ -333,6 +338,9 @@ begin
     tx_valid       <= rec_tx_valid when rec_active = '1' else frame_tx_valid;
     frame_tx_ready <= '0'          when rec_active = '1' else tx_ready;
     rec_tx_ready   <= tx_ready     when rec_active = '1' else '0';
+
+    -- rekord w pełni wysłany (odczytany przez klienta)
+    record_consumed <= rec_done when rec_active = '1' else '0';
 
     -- resp_done do frame_rx: koniec bloku, a gdy blok czeka, nie kończymy ramki
     resp_done_s <= rec_done    when rec_active = '1' else

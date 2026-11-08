@@ -91,6 +91,7 @@ entity reg_access is
         active_gain_a             : out byte_t;
         active_gain_b             : out byte_t;
         active_decimation         : out word_t;
+        active_acq_mode           : out byte_t;
 
         -- wartości wysłane do układów i flagi sprzętowe (tylko odczyt)
         applied_gain_a_in         : in  byte_t;
@@ -132,6 +133,7 @@ architecture rtl of reg_access is
     constant DEFAULT_OFFSET        : std_logic_vector(11 downto 0) := x"800";  -- środek skali
     constant DEFAULT_GAIN          : byte_t := x"00";                          -- AD8370 po resecie: LG0
     constant DEFAULT_DECIMATION    : word_t := x"00000001";                    -- 1 = bez decymacji
+    constant DEFAULT_ACQ_MODE      : byte_t := x"02";                          -- SINGLE
 
     -- Maksymalna długość rekordu dla danej maski kanałów.
     -- Jeden kanał zajmuje pół słowa, więc mieści się dwa razy więcej próbek.
@@ -162,6 +164,7 @@ architecture rtl of reg_access is
     signal pending_gain_a             : byte_t := DEFAULT_GAIN;
     signal pending_gain_b             : byte_t := DEFAULT_GAIN;
     signal pending_decimation         : word_t := DEFAULT_DECIMATION;
+    signal pending_acq_mode           : byte_t := DEFAULT_ACQ_MODE;
 
     -- Konfiguracja: kopia aktywna
     signal active_record_length_r      : word_t := DEFAULT_RECORD_LENGTH;
@@ -176,6 +179,7 @@ architecture rtl of reg_access is
     signal active_gain_a_r             : byte_t := DEFAULT_GAIN;
     signal active_gain_b_r             : byte_t := DEFAULT_GAIN;
     signal active_decimation_r         : word_t := DEFAULT_DECIMATION;
+    signal active_acq_mode_r           : byte_t := DEFAULT_ACQ_MODE;
     signal commit_ok_r                 : std_logic := '0';
 
     -- Liczniki protokołu
@@ -218,6 +222,7 @@ begin
     active_gain_a             <= active_gain_a_r;
     active_gain_b             <= active_gain_b_r;
     active_decimation         <= active_decimation_r;
+    active_acq_mode           <= active_acq_mode_r;
     commit_ok_pulse           <= commit_ok_r;
     debug_led                 <= debug_led_r(7 downto 0);
 
@@ -271,6 +276,8 @@ begin
                 active_gain_b_r               <= DEFAULT_GAIN;
                 pending_decimation            <= DEFAULT_DECIMATION;
                 active_decimation_r           <= DEFAULT_DECIMATION;
+                pending_acq_mode              <= DEFAULT_ACQ_MODE;
+                active_acq_mode_r             <= DEFAULT_ACQ_MODE;
                 counter_frames_ok             <= (others => '0');
                 counter_bad_magic             <= (others => '0');
                 counter_unknown_command       <= (others => '0');
@@ -390,6 +397,16 @@ begin
                             v_code := ERROR_BAD_VALUE;
                         end if;
 
+                    -- tryb wyzwalania: 0 AUTO, 1 NORMAL, 2 SINGLE
+                    elsif request_addr = ADDR_ACQUISITION_MODE then
+                        if unsigned(request_data) <= 2 then
+                            pending_acq_mode <= request_data(7 downto 0);
+                            v_data           := request_data;
+                        else
+                            v_err  := true;
+                            v_code := ERROR_BAD_VALUE;
+                        end if;
+
                     -- decymacja: 1..65535 (0 niepoprawne, bo decymator traktuje je jak 1)
                     elsif request_addr = ADDR_ACQUISITION_DECIMATION then
                         if unsigned(request_data) >= 1 and unsigned(request_data) <= 65535 then
@@ -458,6 +475,7 @@ begin
                             active_gain_a_r             <= pending_gain_a;
                             active_gain_b_r             <= pending_gain_b;
                             active_decimation_r         <= pending_decimation;
+                            active_acq_mode_r           <= pending_acq_mode;
                             commit_ok_r                 <= '1';
                             v_data                      := (others => '0');
                         end if;
@@ -476,6 +494,7 @@ begin
                         pending_gain_a             <= DEFAULT_GAIN;
                         pending_gain_b             <= DEFAULT_GAIN;
                         pending_decimation         <= DEFAULT_DECIMATION;
+                        pending_acq_mode           <= DEFAULT_ACQ_MODE;
                         v_data                     := (others => '0');
 
                     -- czyszczenie liczników: obsługiwane tutaj, bez cmd_valid
@@ -574,6 +593,9 @@ begin
 
                     elsif request_addr = ADDR_COUNTER_BAD_ADDRESS then
                         v_data := std_logic_vector(counter_bad_address);
+
+                    elsif request_addr = ADDR_ACQUISITION_MODE then
+                        v_data := x"000000" & pending_acq_mode;
 
                     elsif request_addr = ADDR_CHANNEL1_APPLIED_GAIN then
                         v_data := x"000000" & applied_gain_a_in;

@@ -88,7 +88,7 @@ registers:
   - {name: ADC_TEST_PATTERN,          address: 0x21, access: rw,                   status: planned,     desc: "Wzorzec testowy zamiast próbek z ADC"}
   - {name: ADC_DELAY,                 address: 0x22, access: rw,                   status: planned,     desc: "Opóźnienie wejścia ADC"}
 
-  - {name: ACQUISITION_MODE,          address: 0x30, access: rw,                   status: planned,     desc: "Auto, normal lub single"}
+  - {name: ACQUISITION_MODE,          address: 0x30, access: rw,                   status: implemented, desc: "Tryb: 0 AUTO (bez wyzwolenia po 0,5 s wymusza), 1 NORMAL (ponowne uzbrojenie po odczycie rekordu), 2 SINGLE (po jednym rekordzie stop). Aktywny po COMMIT, domyślnie 2"}
   - {name: ACQUISITION_RECORD_LENGTH, address: 0x31, access: rw,                   status: implemented,     desc: "Długość rekordu. 1–131072 przy masce 01 lub 02, 1–65536 przy 03, aktywna po COMMIT"}
   - {name: ACQUISITION_PRETRIGGER,    address: 0x32, access: rw,                   status: implemented,     desc: "Próbki przed wyzwoleniem, na kanał"}
   - {name: ACQUISITION_DECIMATION,    address: 0x33, access: rw,                   status: implemented,     desc: "Co N-ta próbka trafia do rekordu"}

@@ -166,6 +166,8 @@ architecture rtl of top is
     signal flags_ch2          : byte_t;
     signal flags_clear_valid  : std_logic;
     signal flags_clear_mask   : byte_t;
+    signal control_acq_mode       : byte_t;
+    signal control_record_consumed : std_logic;
     signal dec_ch1          : byte_t;
     signal dec_ch2          : byte_t;
 
@@ -360,6 +362,8 @@ begin
             flags_ch2_in                => flags_ch2,
             flags_clear_valid           => flags_clear_valid,
             flags_clear_mask            => flags_clear_mask,
+            acq_mode_out                => control_acq_mode,
+            record_consumed             => control_record_consumed,
             record_base                 => acquisition_record_base,
             rd_addr                     => control_read_address,
             rd_data                     => memory_read_data
@@ -456,6 +460,8 @@ begin
             trigger_edge       => control_trigger_edge,
             trigger_level      => control_trigger_level,
             trigger_hysteresis => control_trigger_hysteresis,
+            acq_mode           => control_acq_mode,
+            record_consumed    => control_record_consumed,
             enable             => acquisition_enable,
             mem_we_lo          => acquisition_mem_we_lo,
             mem_we_hi          => acquisition_mem_we_hi,
